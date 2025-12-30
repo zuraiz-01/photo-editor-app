@@ -16,14 +16,22 @@ class HomeView extends GetView<HomeController> {
           children: [
             const Text('Select an image to start editing'),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: controller.pickFromGallery,
-              child: const Text('Pick from Gallery'),
+            Obx(
+              () => FilledButton(
+                onPressed: controller.isPicking.value
+                    ? null
+                    : controller.pickFromGallery,
+                child: const Text('Pick from Gallery'),
+              ),
             ),
             const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: controller.pickFromCamera,
-              child: const Text('Capture from Camera'),
+            Obx(
+              () => OutlinedButton(
+                onPressed: controller.isPicking.value
+                    ? null
+                    : controller.pickFromCamera,
+                child: const Text('Capture from Camera'),
+              ),
             ),
           ],
         ),

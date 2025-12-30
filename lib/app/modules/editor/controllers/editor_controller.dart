@@ -1,10 +1,11 @@
-import 'package:get/get.dart';
-import 'package:image_cropper/image_cropper.dart';
-import 'package:flutter/material.dart';
-import 'package:image_gallery_saver/image_gallery_saver.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import 'dart:typed_data';
+
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class EditorController extends GetxController {
   final imagePath = RxnString();
@@ -19,6 +20,10 @@ class EditorController extends GetxController {
   final activeTextId = RxnInt();
   int _nextTextId = 1;
 
+  final stickers = <EditorSticker>[].obs;
+  final activeStickerId = RxnInt();
+  int _nextStickerId = 1;
+
   final draftText = ''.obs;
   final draftColor = Colors.white.obs;
   final draftFontSize = 28.0.obs;
@@ -31,6 +36,11 @@ class EditorController extends GetxController {
     if (arg is String && arg.isNotEmpty) {
       imagePath.value = arg;
     }
+  }
+
+  void clearSelections() {
+    activeTextId.value = null;
+    activeStickerId.value = null;
   }
 
   Future<void> saveToGallery(Uint8List pngBytes) async {
@@ -53,7 +63,7 @@ class EditorController extends GetxController {
       }
 
       final name = 'photo_editor_${DateTime.now().millisecondsSinceEpoch}';
-      final result = await ImageGallerySaver.saveImage(
+      final result = await ImageGallerySaverPlus.saveImage(
         pngBytes,
         quality: 100,
         name: name,
@@ -96,6 +106,7 @@ class EditorController extends GetxController {
 
   void setActiveText(int? id) {
     activeTextId.value = id;
+    if (id != null) activeStickerId.value = null;
   }
 
   void beginTextEditing({int? id}) {
@@ -151,7 +162,6 @@ class EditorController extends GetxController {
     if (current == null) return;
     final index = texts.indexWhere((e) => e.id == current.id);
     if (index < 0) return;
-
     texts[index] = current.copyWith(
       text: text,
       color: color,
@@ -177,6 +187,73 @@ class EditorController extends GetxController {
     final nextDx = (item.dx + dx).clamp(0.0, 1.0);
     final nextDy = (item.dy + dy).clamp(0.0, 1.0);
     texts[index] = item.copyWith(dx: nextDx, dy: nextDy);
+  }
+
+  int addEmojiSticker({required String emoji, double baseSize = 64}) {
+    final value = emoji.trim();
+    if (value.isEmpty) return -1;
+
+    final id = _nextStickerId++;
+    stickers.add(
+      EditorSticker(
+        id: id,
+        kind: EditorStickerKind.emoji,
+        data: value,
+        dx: 0.5,
+        dy: 0.5,
+        scale: 1.0,
+        rotation: 0.0,
+        baseSize: baseSize,
+      ),
+    );
+    activeStickerId.value = id;
+    activeTextId.value = null;
+    return id;
+  }
+
+  void setActiveSticker(int? id) {
+    activeStickerId.value = id;
+    if (id != null) activeTextId.value = null;
+  }
+
+  EditorSticker? get activeSticker {
+    final id = activeStickerId.value;
+    if (id == null) return null;
+    return stickers.firstWhereOrNull((e) => e.id == id);
+  }
+
+  void removeActiveSticker() {
+    final id = activeStickerId.value;
+    if (id == null) return;
+    stickers.removeWhere((e) => e.id == id);
+    activeStickerId.value = null;
+  }
+
+  void bringActiveStickerToFront() {
+    final current = activeSticker;
+    if (current == null) return;
+    final index = stickers.indexWhere((e) => e.id == current.id);
+    if (index < 0) return;
+    stickers.removeAt(index);
+    stickers.add(current);
+  }
+
+  void updateStickerTransform({
+    required int id,
+    double? dx,
+    double? dy,
+    double? scale,
+    double? rotation,
+  }) {
+    final index = stickers.indexWhere((e) => e.id == id);
+    if (index < 0) return;
+    final item = stickers[index];
+    stickers[index] = item.copyWith(
+      dx: (dx ?? item.dx).clamp(0.0, 1.0),
+      dy: (dy ?? item.dy).clamp(0.0, 1.0),
+      scale: (scale ?? item.scale).clamp(0.2, 8.0),
+      rotation: rotation ?? item.rotation,
+    );
   }
 
   Future<void> cropImage() async {
@@ -329,23 +406,19 @@ const List<double> _invert = <double>[
 List<List<double>> _buildPresets() {
   final out = <List<double>>[];
 
-  // Index 0 is treated as "None" (identity -> return null)
+  // Index 0 treated as "None".
   out.add(_identity);
-
-  // Core presets
   out.add(_grayscale);
   out.add(_sepia);
   out.add(_invert);
 
-  // Variants: warm/cool (tint), vivid (saturation-ish), fade, brighten, contrast.
-  // We generate enough presets to exceed 50.
   for (var i = 0; i < 12; i++) {
-    final t = i / 11.0; // 0..1
-    out.add(_tintMatrix(r: 1.0 + 0.25 * t, g: 1.0, b: 1.0 - 0.20 * t)); // warm
+    final t = i / 11.0;
+    out.add(_tintMatrix(r: 1.0 + 0.25 * t, g: 1.0, b: 1.0 - 0.20 * t));
   }
   for (var i = 0; i < 12; i++) {
     final t = i / 11.0;
-    out.add(_tintMatrix(r: 1.0 - 0.20 * t, g: 1.0, b: 1.0 + 0.25 * t)); // cool
+    out.add(_tintMatrix(r: 1.0 - 0.20 * t, g: 1.0, b: 1.0 + 0.25 * t));
   }
   for (var i = 0; i < 12; i++) {
     final t = i / 11.0;
@@ -401,7 +474,6 @@ List<double> _brightnessOffset(double offset) {
 }
 
 List<double> _contrastMatrix(double c) {
-  // Pivot around 128
   final o = 128 * (1 - c);
   return <double>[c, 0, 0, 0, o, 0, c, 0, 0, o, 0, 0, c, 0, o, 0, 0, 0, 1, 0];
 }
@@ -500,6 +572,49 @@ class EditorText {
       fontSize: fontSize ?? this.fontSize,
       dx: dx ?? this.dx,
       dy: dy ?? this.dy,
+    );
+  }
+}
+
+enum EditorStickerKind { emoji }
+
+@immutable
+class EditorSticker {
+  const EditorSticker({
+    required this.id,
+    required this.kind,
+    required this.data,
+    required this.dx,
+    required this.dy,
+    required this.scale,
+    required this.rotation,
+    required this.baseSize,
+  });
+
+  final int id;
+  final EditorStickerKind kind;
+  final String data;
+  final double dx;
+  final double dy;
+  final double scale;
+  final double rotation;
+  final double baseSize;
+
+  EditorSticker copyWith({
+    double? dx,
+    double? dy,
+    double? scale,
+    double? rotation,
+  }) {
+    return EditorSticker(
+      id: id,
+      kind: kind,
+      data: data,
+      dx: dx ?? this.dx,
+      dy: dy ?? this.dy,
+      scale: scale ?? this.scale,
+      rotation: rotation ?? this.rotation,
+      baseSize: baseSize,
     );
   }
 }

@@ -319,6 +319,146 @@ class EditorView extends GetView<EditorController> {
     );
   }
 
+  void _openStickersSheet(BuildContext context) {
+    final defaults = <String>[
+      '😎',
+      '🔥',
+      '❤️',
+      '😂',
+      '✨',
+      '👍',
+      '😍',
+      '🎉',
+      '🥳',
+      '😺',
+      '🌈',
+      '💯',
+    ];
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Obx(() {
+              final hasActive = controller.activeStickerId.value != null;
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Stickers',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 120,
+                    child: GridView.builder(
+                      scrollDirection: Axis.horizontal,
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            mainAxisSpacing: 10,
+                            crossAxisSpacing: 10,
+                          ),
+                      itemCount: defaults.length,
+                      itemBuilder: (context, index) {
+                        final emoji = defaults[index];
+                        return FilledButton.tonal(
+                          onPressed: () =>
+                              controller.addEmojiSticker(emoji: emoji),
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 26),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () async {
+                      final emoji = await _askForEmoji(context);
+                      if (emoji == null) return;
+                      controller.addEmojiSticker(emoji: emoji);
+                    },
+                    child: const Text('Add from Keyboard (Emoji)'),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: hasActive
+                              ? () {
+                                  controller.removeActiveSticker();
+                                }
+                              : null,
+                          child: const Text('Delete Selected'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: hasActive
+                              ? () {
+                                  controller.bringActiveStickerToFront();
+                                }
+                              : null,
+                          child: const Text('Bring to Front'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Done'),
+                  ),
+                ],
+              );
+            }),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<String?> _askForEmoji(BuildContext context) async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Emoji Sticker'),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'Type/paste an emoji',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(ctrl.text),
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -348,6 +488,11 @@ class EditorView extends GetView<EditorController> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
+                      GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: controller.clearSelections,
+                        child: const SizedBox.expand(),
+                      ),
                       FittedBox(
                         fit: BoxFit.contain,
                         child: SizedBox(
@@ -356,6 +501,35 @@ class EditorView extends GetView<EditorController> {
                           child: preview,
                         ),
                       ),
+                      ...controller.stickers.map((s) {
+                        final left =
+                            (s.dx * constraints.maxWidth) -
+                            (s.baseSize * s.scale / 2);
+                        final top =
+                            (s.dy * constraints.maxHeight) -
+                            (s.baseSize * s.scale / 2);
+                        return Positioned(
+                          left: left,
+                          top: top,
+                          child: _StickerOverlay(
+                            sticker: s,
+                            isSelected:
+                                controller.activeStickerId.value == s.id,
+                            onTap: () => controller.setActiveSticker(s.id),
+                            onTransform: (delta, scale, rotation) {
+                              if (controller.activeStickerId.value != s.id)
+                                return;
+                              controller.updateStickerTransform(
+                                id: s.id,
+                                dx: s.dx + delta.dx / constraints.maxWidth,
+                                dy: s.dy + delta.dy / constraints.maxHeight,
+                                scale: scale,
+                                rotation: rotation,
+                              );
+                            },
+                          ),
+                        );
+                      }),
                       ...controller.texts.map((t) {
                         final left = t.dx * constraints.maxWidth;
                         final top = t.dy * constraints.maxHeight;
@@ -446,11 +620,96 @@ class EditorView extends GetView<EditorController> {
                 },
               ),
               _EditorOption(
+                icon: Icons.emoji_emotions_outlined,
+                label: 'Sticker',
+                onTap: () => _openStickersSheet(context),
+              ),
+              _EditorOption(
                 icon: Icons.save_alt,
                 label: 'Save',
                 onTap: _saveCurrentImage,
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StickerOverlay extends StatefulWidget {
+  const _StickerOverlay({
+    required this.sticker,
+    required this.isSelected,
+    required this.onTap,
+    required this.onTransform,
+  });
+
+  final EditorSticker sticker;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final void Function(Offset delta, double scale, double rotation) onTransform;
+
+  @override
+  State<_StickerOverlay> createState() => _StickerOverlayState();
+}
+
+class _StickerOverlayState extends State<_StickerOverlay> {
+  double _startScale = 1.0;
+  double _startRotation = 0.0;
+
+  @override
+  void didUpdateWidget(covariant _StickerOverlay oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sticker.id != widget.sticker.id) {
+      _startScale = 1.0;
+      _startRotation = 0.0;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.sticker;
+    final child = Text(
+      s.data,
+      style: TextStyle(fontSize: s.baseSize, height: 1),
+    );
+
+    return GestureDetector(
+      onTap: widget.onTap,
+      onScaleStart: (_) {
+        _startScale = s.scale;
+        _startRotation = s.rotation;
+      },
+      onScaleUpdate: (d) {
+        widget.onTransform(
+          d.focalPointDelta,
+          _startScale * d.scale,
+          _startRotation + d.rotation,
+        );
+      },
+      child: Transform.rotate(
+        angle: s.rotation,
+        child: Transform.scale(
+          scale: s.scale,
+          alignment: Alignment.topLeft,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: widget.isSelected
+                  ? Border.all(
+                      color: Theme.of(context).colorScheme.primary,
+                      width: 2,
+                    )
+                  : null,
+              color: widget.isSelected
+                  ? Theme.of(
+                      context,
+                    ).colorScheme.surface.withValues(alpha: 0.15)
+                  : Colors.transparent,
+            ),
+            child: child,
           ),
         ),
       ),

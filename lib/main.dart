@@ -19,26 +19,65 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
+    const neonCyan = Color(0xFF00E5FF);
+    const neonPurple = Color(0xFFB44CFF);
+    const bg = Color(0xFF070A12);
+
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: neonCyan,
+          brightness: Brightness.dark,
+        ).copyWith(
+          primary: neonCyan,
+          secondary: neonPurple,
+          surface: const Color(0xFF0B1020),
+        );
+
     return GetMaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Photo Editor',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        brightness: Brightness.dark,
+        colorScheme: scheme,
+        scaffoldBackgroundColor: bg,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF0B1020),
+          foregroundColor: Colors.white,
+          centerTitle: true,
+          elevation: 0,
+        ),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: const Color(0xFF0B1020),
+          contentTextStyle: const TextStyle(color: Colors.white),
+          actionTextColor: neonCyan,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: neonCyan,
+            foregroundColor: Colors.black,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: neonCyan,
+            side: const BorderSide(color: neonCyan),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+        sliderTheme: const SliderThemeData(
+          activeTrackColor: neonCyan,
+          inactiveTrackColor: Color(0xFF1C2947),
+          thumbColor: neonCyan,
+        ),
       ),
       initialRoute: Routes.home,
       getPages: AppPages.pages,

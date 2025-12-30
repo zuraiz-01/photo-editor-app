@@ -1,10 +1,15 @@
 import 'package:get/get.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:flutter/material.dart';
+import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'dart:io';
+import 'dart:typed_data';
 
 class EditorController extends GetxController {
   final imagePath = RxnString();
   final isCropping = false.obs;
+  final isSaving = false.obs;
 
   final presets = <List<double>>[];
   final selectedPresetIndex = 0.obs;
@@ -25,6 +30,47 @@ class EditorController extends GetxController {
     final arg = Get.arguments;
     if (arg is String && arg.isNotEmpty) {
       imagePath.value = arg;
+    }
+  }
+
+  Future<void> saveToGallery(Uint8List pngBytes) async {
+    if (isSaving.value) return;
+    isSaving.value = true;
+    try {
+      if (Platform.isIOS) {
+        final status = await Permission.photosAddOnly.request();
+        if (!status.isGranted) {
+          Get.snackbar('Save', 'Permission denied');
+          return;
+        }
+      } else if (Platform.isAndroid) {
+        final photos = await Permission.photos.request();
+        final storage = await Permission.storage.request();
+        if (!photos.isGranted && !storage.isGranted) {
+          Get.snackbar('Save', 'Permission denied');
+          return;
+        }
+      }
+
+      final name = 'photo_editor_${DateTime.now().millisecondsSinceEpoch}';
+      final result = await ImageGallerySaver.saveImage(
+        pngBytes,
+        quality: 100,
+        name: name,
+      );
+
+      final success =
+          (result is Map &&
+          (result['isSuccess'] == true || result['isSuccess'] == 1));
+      if (success) {
+        Get.snackbar('Save', 'Saved to gallery');
+      } else {
+        Get.snackbar('Save', 'Save failed');
+      }
+    } catch (e) {
+      Get.snackbar('Save failed', e.toString());
+    } finally {
+      isSaving.value = false;
     }
   }
 

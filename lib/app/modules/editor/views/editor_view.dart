@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
 
 import '../controllers/editor_controller.dart';
@@ -48,8 +50,33 @@ class _FilterThumb extends StatelessWidget {
 class EditorView extends GetView<EditorController> {
   const EditorView({super.key});
 
-  void _comingSoon(String title) {
-    Get.snackbar(title, 'Coming soon');
+  static final GlobalKey _previewKey = GlobalKey();
+
+  Future<void> _saveCurrentImage() async {
+    try {
+      final context = _previewKey.currentContext;
+      if (context == null) {
+        Get.snackbar('Save', 'Preview not ready');
+        return;
+      }
+      final boundary = context.findRenderObject();
+      if (boundary is! RenderRepaintBoundary) {
+        Get.snackbar('Save', 'Preview not ready');
+        return;
+      }
+
+      final pixelRatio =
+          ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
+      final image = await boundary.toImage(pixelRatio: pixelRatio);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData == null) {
+        Get.snackbar('Save', 'Failed to export image');
+        return;
+      }
+      await controller.saveToGallery(byteData.buffer.asUint8List());
+    } catch (e) {
+      Get.snackbar('Save failed', e.toString());
+    }
   }
 
   void _openTextSheet(BuildContext context) {
@@ -316,70 +343,72 @@ class EditorView extends GetView<EditorController> {
             padding: const EdgeInsets.all(16),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    FittedBox(
-                      fit: BoxFit.contain,
-                      child: SizedBox(
-                        width: constraints.maxWidth,
-                        height: constraints.maxHeight,
-                        child: preview,
-                      ),
-                    ),
-                    ...controller.texts.map((t) {
-                      final left = t.dx * constraints.maxWidth;
-                      final top = t.dy * constraints.maxHeight;
-                      return Positioned(
-                        left: left,
-                        top: top,
-                        child: GestureDetector(
-                          onTap: () => controller.setActiveText(t.id),
-                          onPanUpdate: (d) {
-                            controller.moveTextByDelta(
-                              id: t.id,
-                              dx: d.delta.dx / constraints.maxWidth,
-                              dy: d.delta.dy / constraints.maxHeight,
-                            );
-                          },
-                          child: Obx(() {
-                            final selected =
-                                controller.activeTextId.value == t.id;
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                border: selected
-                                    ? Border.all(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
-                                        width: 2,
-                                      )
-                                    : null,
-                                color: selected
-                                    ? Theme.of(
-                                        context,
-                                      ).colorScheme.surface.withOpacity(0.2)
-                                    : Colors.transparent,
-                              ),
-                              child: Text(
-                                t.text,
-                                style: TextStyle(
-                                  color: t.color,
-                                  fontSize: t.fontSize,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            );
-                          }),
+                return RepaintBoundary(
+                  key: _previewKey,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.contain,
+                        child: SizedBox(
+                          width: constraints.maxWidth,
+                          height: constraints.maxHeight,
+                          child: preview,
                         ),
-                      );
-                    }),
-                  ],
+                      ),
+                      ...controller.texts.map((t) {
+                        final left = t.dx * constraints.maxWidth;
+                        final top = t.dy * constraints.maxHeight;
+                        return Positioned(
+                          left: left,
+                          top: top,
+                          child: GestureDetector(
+                            onTap: () => controller.setActiveText(t.id),
+                            onPanUpdate: (d) {
+                              controller.moveTextByDelta(
+                                id: t.id,
+                                dx: d.delta.dx / constraints.maxWidth,
+                                dy: d.delta.dy / constraints.maxHeight,
+                              );
+                            },
+                            child: Obx(() {
+                              final selected =
+                                  controller.activeTextId.value == t.id;
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: selected
+                                      ? Border.all(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
+                                          width: 2,
+                                        )
+                                      : null,
+                                  color: selected
+                                      ? Theme.of(context).colorScheme.surface
+                                            .withValues(alpha: 0.2)
+                                      : Colors.transparent,
+                                ),
+                                child: Text(
+                                  t.text,
+                                  style: TextStyle(
+                                    color: t.color,
+                                    fontSize: t.fontSize,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              );
+                            }),
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
                 );
               },
             ),
@@ -413,14 +442,13 @@ class EditorView extends GetView<EditorController> {
                 icon: Icons.text_fields,
                 label: 'Text',
                 onTap: () {
-                  controller.setActiveText(null);
                   _openTextSheet(context);
                 },
               ),
               _EditorOption(
                 icon: Icons.save_alt,
                 label: 'Save',
-                onTap: () => _comingSoon('Save'),
+                onTap: _saveCurrentImage,
               ),
             ],
           ),

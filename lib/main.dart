@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 import 'app/routes/app_pages.dart';
 import 'app/routes/app_routes.dart';
 
-void main() {
+Future<void> main() async {
+  final binding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: binding);
+  await Future<void>.delayed(const Duration(seconds: 3));
+  FlutterNativeSplash.remove();
   runApp(const MyApp());
 }
 

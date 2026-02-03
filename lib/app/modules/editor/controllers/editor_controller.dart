@@ -773,6 +773,11 @@ class EditorController extends GetxController {
     _pushState();
   }
 
+  void deleteStroke(int id) {
+    strokes.removeWhere((e) => e.id == id);
+    _pushState();
+  }
+
   void setStrokeColor(Color c) {
     strokeColor.value = c;
   }

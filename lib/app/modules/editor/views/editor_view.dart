@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../controllers/editor_controller.dart';
+import '../../../theme/theme_controller.dart';
 
 class _FilterThumb extends StatelessWidget {
   const _FilterThumb({
@@ -1034,6 +1035,19 @@ class EditorView extends GetView<EditorController> {
                       onTap: () => controller.setActiveText(t.id),
                     );
                   }),
+                  const SizedBox(height: 8),
+                  Text('Strokes', style: Theme.of(context).textTheme.bodySmall),
+                  ...controller.strokes.map((s) {
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.edit),
+                      title: Text('Stroke ${s.id}'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete),
+                        onPressed: () => controller.deleteStroke(s.id),
+                      ),
+                    );
+                  }),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
@@ -1259,6 +1273,14 @@ class EditorView extends GetView<EditorController> {
             tooltip: 'Replace photo',
             onPressed: () => _openReplaceSheet(context),
             icon: const Icon(Icons.image_outlined),
+          ),
+          IconButton(
+            tooltip: 'Theme',
+            onPressed: () {
+              final theme = Get.find<ThemeController>();
+              theme.toggleMode();
+            },
+            icon: const Icon(Icons.brightness_6),
           ),
         ],
       ),

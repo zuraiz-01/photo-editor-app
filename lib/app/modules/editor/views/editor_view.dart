@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:sizer/sizer.dart';
 
 import '../controllers/editor_controller.dart';
@@ -267,12 +268,64 @@ class EditorView extends GetView<EditorController> {
                     onChanged: (v) => controller.setDraftText(v),
                   ),
                   const SizedBox(height: 12),
+                  DropdownButton<String>(
+                    value: controller.selectedFont.value,
+                    isExpanded: true,
+                    items: controller.fonts
+                        .map((f) => DropdownMenuItem(
+                              value: f,
+                              child: Text(f),
+                            ))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) controller.selectedFont.value = v;
+                    },
+                  ),
+                  const SizedBox(height: 12),
                   Text('Size: ${fontSize.round()}'),
                   Slider(
                     value: fontSize.clamp(12.0, 72.0),
                     min: 12,
                     max: 72,
                     onChanged: controller.setDraftFontSize,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 12,
+                    children: [
+                      FilterChip(
+                        label: const Text('Shadow'),
+                        selected: controller.enableShadow.value,
+                        onSelected: (v) => controller.enableShadow.value = v,
+                      ),
+                      FilterChip(
+                        label: const Text('Glow'),
+                        selected: controller.enableGlow.value,
+                        onSelected: (v) => controller.enableGlow.value = v,
+                      ),
+                      FilterChip(
+                        label: const Text('Curved'),
+                        selected: controller.enableCurved.value,
+                        onSelected: (v) => controller.enableCurved.value = v,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Outline: ${controller.outlineSize.value.toStringAsFixed(1)}'),
+                  Slider(
+                    value: controller.outlineSize.value,
+                    min: 0,
+                    max: 6,
+                    onChanged: (v) => controller.outlineSize.value = v,
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Curve radius: ${controller.curveRadius.value.round()}'),
+                  Slider(
+                    value:
+                        (controller.curveRadius.value.clamp(60, 260)).toDouble(),
+                    min: 60,
+                    max: 260,
+                    onChanged: (v) => controller.curveRadius.value = v,
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -309,6 +362,27 @@ class EditorView extends GetView<EditorController> {
                         onTap: () => controller.setDraftColor(Colors.yellow),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Quick templates', style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      ('New drop just landed ✨', 'Insta caption'),
+                      ('Stay humble. Hustle hard.', 'Quote'),
+                      ('Flash Sale 50% OFF!', 'Sale banner'),
+                      ('Limited stock. Grab now!', 'CTA'),
+                    ].map((tpl) {
+                      return OutlinedButton(
+                        onPressed: () {
+                          textCtrl.text = tpl.$1;
+                          controller.setDraftText(tpl.$1);
+                        },
+                        child: Text(tpl.$2),
+                      );
+                    }).toList(),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -1488,12 +1562,12 @@ class EditorView extends GetView<EditorController> {
                               if (t.hidden) return const SizedBox.shrink();
                               final left = t.dx * constraints.maxWidth;
                               final top = t.dy * constraints.maxHeight;
-                              return Positioned(
-                                left: left,
-                                top: top,
-                                child: GestureDetector(
-                                  onTap: () => controller.setActiveText(t.id),
-                                  onPanUpdate: (d) {
+                    return Positioned(
+                      left: left,
+                      top: top,
+                      child: GestureDetector(
+                        onTap: () => controller.setActiveText(t.id),
+                        onPanUpdate: (d) {
                                     controller.moveTextByDelta(
                                       id: t.id,
                                       dx: d.delta.dx / constraints.maxWidth,
@@ -1503,39 +1577,32 @@ class EditorView extends GetView<EditorController> {
                                   child: Obx(() {
                                     final selected =
                                         controller.activeTextId.value == t.id;
-                                    return Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: selected
-                                            ? Border.all(
-                                                color: Theme.of(
-                                                  context,
-                                                ).colorScheme.primary,
-                                                width: 2,
-                                              )
-                                            : null,
-                                        color: selected
-                                            ? Theme.of(context).colorScheme.surface
-                                                  .withValues(alpha: 0.2)
-                                            : Colors.transparent,
-                                      ),
-                                      child: Text(
-                                        t.text,
-                                        style: TextStyle(
-                                          color: t.color,
-                                          fontSize: t.fontSize,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                ),
-                              );
-                            }),
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: selected
+                                          ? Border.all(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
+                                              width: 2,
+                                            )
+                                          : null,
+                                      color: selected
+                                          ? Theme.of(context).colorScheme.surface
+                                                .withValues(alpha: 0.2)
+                                          : Colors.transparent,
+                                    ),
+                                    child: _StyledText(t: t),
+                                  );
+                                }),
+                              ),
+                            );
+                          }),
                             Obx(() {
                               final strokes = controller.strokes.toList();
                               if (strokes.isEmpty) return const SizedBox.shrink();
@@ -1942,6 +2009,185 @@ class _EditorOption extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _StyledText extends StatelessWidget {
+  const _StyledText({required this.t});
+
+  final EditorText t;
+
+  TextStyle _baseStyle() {
+    final shadows = <Shadow>[];
+    if (t.shadow) {
+      shadows.add(
+        Shadow(
+          offset: const Offset(2, 2),
+          blurRadius: 4,
+          color: Colors.black.withValues(alpha: 0.55),
+        ),
+      );
+    }
+    if (t.glow) {
+      shadows.add(
+        Shadow(
+          offset: Offset.zero,
+          blurRadius: 18,
+          color: t.color.withValues(alpha: 0.8),
+        ),
+      );
+    }
+
+    TextStyle base = TextStyle(
+      color: t.color,
+      fontSize: t.fontSize,
+      height: 1.1,
+      shadows: shadows,
+    );
+
+    try {
+      base = GoogleFonts.getFont(t.font, textStyle: base);
+    } catch (_) {
+      // fallback silently
+    }
+    return base;
+  }
+
+  TextStyle _outlineStyle() {
+    final outlineColor =
+        t.color.computeLuminance() > 0.5 ? Colors.black : Colors.white;
+    TextStyle stroke = TextStyle(
+      fontSize: t.fontSize,
+      height: 1.1,
+      foreground: Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = t.outline.clamp(0.0, 8.0)
+        ..color = outlineColor.withValues(alpha: 0.9),
+    );
+    try {
+      stroke = GoogleFonts.getFont(t.font, textStyle: stroke);
+    } catch (_) {}
+    return stroke;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = _baseStyle();
+    final outline = t.outline > 0 ? _outlineStyle() : null;
+
+    if (t.curved) {
+      return _CurvedText(
+        text: t.text,
+        fillStyle: fill,
+        outlineStyle: outline,
+        radius: t.curveRadius,
+      );
+    }
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        if (outline != null) Text(t.text, style: outline),
+        Text(t.text, style: fill),
+      ],
+    );
+  }
+}
+
+class _CurvedText extends StatelessWidget {
+  const _CurvedText({
+    required this.text,
+    required this.fillStyle,
+    required this.radius,
+    this.outlineStyle,
+  });
+
+  final String text;
+  final TextStyle fillStyle;
+  final TextStyle? outlineStyle;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = radius * 2 + (fillStyle.fontSize ?? 16) * 0.6;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _CurvedTextPainter(
+          text: text,
+          fillStyle: fillStyle,
+          outlineStyle: outlineStyle,
+          radius: radius,
+        ),
+      ),
+    );
+  }
+}
+
+class _CurvedTextPainter extends CustomPainter {
+  const _CurvedTextPainter({
+    required this.text,
+    required this.fillStyle,
+    required this.radius,
+    this.outlineStyle,
+  });
+
+  final String text;
+  final TextStyle fillStyle;
+  final TextStyle? outlineStyle;
+  final double radius;
+
+  TextPainter _painterFor(String char, TextStyle style) {
+    return TextPainter(
+      text: TextSpan(text: char, style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (text.isEmpty) return;
+    final center = Offset(size.width / 2, size.height / 2);
+    final totalAngle = math.pi; // 180 deg arc
+    double currentAngle = -totalAngle / 2;
+
+    for (final rune in text.runes) {
+      final char = String.fromCharCode(rune);
+      final fillPainter = _painterFor(char, fillStyle);
+      final outlinePainter =
+          outlineStyle != null ? _painterFor(char, outlineStyle!) : null;
+
+      final charAngle = (fillPainter.width / radius).clamp(0.01, 0.6);
+      final midAngle = currentAngle + charAngle / 2;
+      final offset = Offset(
+        center.dx + radius * math.cos(midAngle),
+        center.dy + radius * math.sin(midAngle),
+      );
+
+      void paintPainter(TextPainter p) {
+        canvas.save();
+        canvas.translate(offset.dx, offset.dy);
+        canvas.rotate(midAngle + math.pi / 2);
+        p.paint(
+          canvas,
+          Offset(-p.width / 2, -p.height / 2),
+        );
+        canvas.restore();
+      }
+
+      if (outlinePainter != null) paintPainter(outlinePainter);
+      paintPainter(fillPainter);
+      currentAngle += charAngle;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CurvedTextPainter oldDelegate) {
+    return text != oldDelegate.text ||
+        fillStyle != oldDelegate.fillStyle ||
+        outlineStyle != oldDelegate.outlineStyle ||
+        radius != oldDelegate.radius;
   }
 }
 

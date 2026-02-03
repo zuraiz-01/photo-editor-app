@@ -44,6 +44,7 @@ dependencies:
   path_provider: ^2.1.4
   image: ^4.2.0
   sizer: ^2.0.15
+  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:

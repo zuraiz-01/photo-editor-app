@@ -61,6 +61,23 @@ class EditorController extends GetxController {
   final strokeWidth = 6.0.obs;
   final strokeOpacity = 0.8.obs;
 
+  // Typography
+  final fonts = <String>[
+    'Montserrat',
+    'Poppins',
+    'Roboto',
+    'Lato',
+    'Oswald',
+    'Playfair Display',
+    'Bebas Neue',
+  ];
+  final selectedFont = 'Poppins'.obs;
+  final enableShadow = false.obs;
+  final enableGlow = false.obs;
+  final outlineSize = 0.0.obs;
+  final enableCurved = false.obs;
+  final curveRadius = 140.0.obs;
+
   final draftText = ''.obs;
   final draftColor = Colors.white.obs;
   final draftFontSize = 28.0.obs;
@@ -269,6 +286,12 @@ class EditorController extends GetxController {
     required String text,
     Color color = Colors.white,
     double fontSize = 28,
+    String font = 'Poppins',
+    bool shadow = false,
+    bool glow = false,
+    double outline = 0.0,
+    bool curved = false,
+    double curveRadius = 140.0,
   }) {
     final id = _nextTextId++;
     texts.add(
@@ -279,6 +302,12 @@ class EditorController extends GetxController {
         fontSize: fontSize,
         dx: 0.5,
         dy: 0.5,
+        font: font,
+        shadow: shadow,
+        glow: glow,
+        outline: outline,
+        curved: curved,
+        curveRadius: curveRadius,
       ),
     );
     activeTextId.value = id;
@@ -299,6 +328,12 @@ class EditorController extends GetxController {
     draftText.value = current?.text ?? '';
     draftColor.value = current?.color ?? Colors.white;
     draftFontSize.value = current?.fontSize ?? 28.0;
+    selectedFont.value = current?.font ?? selectedFont.value;
+    enableShadow.value = current?.shadow ?? false;
+    enableGlow.value = current?.glow ?? false;
+    outlineSize.value = current?.outline ?? 0.0;
+    enableCurved.value = current?.curved ?? false;
+    curveRadius.value = current?.curveRadius ?? 140.0;
   }
 
   void setDraftText(String value) {
@@ -323,6 +358,12 @@ class EditorController extends GetxController {
         text: value,
         color: draftColor.value,
         fontSize: draftFontSize.value,
+        font: selectedFont.value,
+        shadow: enableShadow.value,
+        glow: enableGlow.value,
+        outline: outlineSize.value,
+        curved: enableCurved.value,
+        curveRadius: curveRadius.value,
       );
       return;
     }
@@ -330,6 +371,12 @@ class EditorController extends GetxController {
       text: value,
       color: draftColor.value,
       fontSize: draftFontSize.value,
+      font: selectedFont.value,
+      shadow: enableShadow.value,
+      glow: enableGlow.value,
+      outline: outlineSize.value,
+      curved: enableCurved.value,
+      curveRadius: curveRadius.value,
     );
   }
 
@@ -339,7 +386,17 @@ class EditorController extends GetxController {
     return texts.firstWhereOrNull((e) => e.id == id);
   }
 
-  void updateActiveText({String? text, Color? color, double? fontSize}) {
+  void updateActiveText({
+    String? text,
+    Color? color,
+    double? fontSize,
+    String? font,
+    bool? shadow,
+    bool? glow,
+    double? outline,
+    bool? curved,
+    double? curveRadius,
+  }) {
     final current = activeText;
     if (current == null) return;
     final index = texts.indexWhere((e) => e.id == current.id);
@@ -348,6 +405,12 @@ class EditorController extends GetxController {
       text: text,
       color: color,
       fontSize: fontSize,
+      font: font ?? selectedFont.value,
+      shadow: shadow ?? enableShadow.value,
+      glow: glow ?? enableGlow.value,
+      outline: outline ?? outlineSize.value,
+      curved: curved ?? enableCurved.value,
+      curveRadius: curveRadius ?? this.curveRadius.value,
     );
     _pushState();
   }
@@ -1248,6 +1311,12 @@ class EditorText {
     required this.dy,
     this.hidden = false,
     this.locked = false,
+    this.font = 'Poppins',
+    this.shadow = false,
+    this.glow = false,
+    this.outline = 0.0,
+    this.curved = false,
+    this.curveRadius = 140.0,
   });
 
   final int id;
@@ -1258,6 +1327,12 @@ class EditorText {
   final double dy;
   final bool hidden;
   final bool locked;
+  final String font;
+  final bool shadow;
+  final bool glow;
+  final double outline;
+  final bool curved;
+  final double curveRadius;
 
   EditorText copyWith({
     String? text,
@@ -1267,6 +1342,12 @@ class EditorText {
     double? dy,
     bool? hidden,
     bool? locked,
+    String? font,
+    bool? shadow,
+    bool? glow,
+    double? outline,
+    bool? curved,
+    double? curveRadius,
   }) {
     return EditorText(
       id: id,
@@ -1277,6 +1358,12 @@ class EditorText {
       dy: dy ?? this.dy,
       hidden: hidden ?? this.hidden,
       locked: locked ?? this.locked,
+      font: font ?? this.font,
+      shadow: shadow ?? this.shadow,
+      glow: glow ?? this.glow,
+      outline: outline ?? this.outline,
+      curved: curved ?? this.curved,
+      curveRadius: curveRadius ?? this.curveRadius,
     );
   }
 }

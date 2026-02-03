@@ -304,6 +304,16 @@ class EditorView extends GetView<EditorController> {
                         onSelected: (v) => controller.enableGlow.value = v,
                       ),
                       FilterChip(
+                        label: const Text('Neon'),
+                        selected: controller.enableNeon.value,
+                        onSelected: (v) => controller.enableNeon.value = v,
+                      ),
+                      FilterChip(
+                        label: const Text('3D/Emboss'),
+                        selected: controller.enableEmboss.value,
+                        onSelected: (v) => controller.enableEmboss.value = v,
+                      ),
+                      FilterChip(
                         label: const Text('Curved'),
                         selected: controller.enableCurved.value,
                         onSelected: (v) => controller.enableCurved.value = v,
@@ -363,6 +373,26 @@ class EditorView extends GetView<EditorController> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  Text('Neon palette', style: Theme.of(context).textTheme.bodySmall),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    children: const [
+                      Color(0xFF00E5FF),
+                      Color(0xFFFF00E5),
+                      Color(0xFFFFEA00),
+                      Color(0xFF7C4DFF),
+                      Color(0xFF00FF6A),
+                      Color(0xFFFF6A00),
+                    ].map(
+                      (c) => _ColorDot(
+                        color: c,
+                        selected: color == c,
+                        onTap: () => controller.setDraftColor(c),
+                      ),
+                    ).toList(),
+                  ),
                   const SizedBox(height: 12),
                   Text('Quick templates', style: Theme.of(context).textTheme.labelLarge),
                   const SizedBox(height: 6),
@@ -374,6 +404,10 @@ class EditorView extends GetView<EditorController> {
                       ('Stay humble. Hustle hard.', 'Quote'),
                       ('Flash Sale 50% OFF!', 'Sale banner'),
                       ('Limited stock. Grab now!', 'CTA'),
+                      ('🔥 Mega Sale today only!', 'Sale'),
+                      ('Dream. Plan. Execute.', 'Quote'),
+                      ('Weekend vibes with friends!', 'Caption'),
+                      ('Shop now • Free shipping', 'CTA'),
                     ].map((tpl) {
                       return OutlinedButton(
                         onPressed: () {
@@ -2019,12 +2053,14 @@ class _StyledText extends StatelessWidget {
 
   TextStyle _baseStyle() {
     final shadows = <Shadow>[];
-    if (t.shadow) {
+    if (t.shadow || t.emboss) {
       shadows.add(
         Shadow(
           offset: const Offset(2, 2),
-          blurRadius: 4,
-          color: Colors.black.withValues(alpha: 0.55),
+          blurRadius: t.emboss ? 0 : 4,
+          color: t.emboss
+              ? Colors.black.withValues(alpha: 0.3)
+              : Colors.black.withValues(alpha: 0.55),
         ),
       );
     }
@@ -2036,6 +2072,29 @@ class _StyledText extends StatelessWidget {
           color: t.color.withValues(alpha: 0.8),
         ),
       );
+    }
+    if (t.neon) {
+      shadows.addAll([
+        Shadow(
+          offset: Offset.zero,
+          blurRadius: 30,
+          color: t.color.withValues(alpha: 0.75),
+        ),
+        Shadow(
+          offset: Offset.zero,
+          blurRadius: 50,
+          color: t.color.withValues(alpha: 0.35),
+        ),
+      ]);
+    }
+    if (t.emboss) {
+      shadows.addAll([
+        Shadow(
+          offset: const Offset(-1, -1),
+          blurRadius: 0,
+          color: Colors.white.withValues(alpha: 0.65),
+        ),
+      ]);
     }
 
     TextStyle base = TextStyle(

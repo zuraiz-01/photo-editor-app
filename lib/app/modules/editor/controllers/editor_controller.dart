@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -70,6 +72,12 @@ class EditorController extends GetxController {
     'Oswald',
     'Playfair Display',
     'Bebas Neue',
+    'Noto Nastaliq Urdu',
+    'Noto Naskh Arabic',
+    'Noto Kufi Arabic',
+    'Cairo',
+    'Amiri',
+    'Scheherazade New',
   ];
   final selectedFont = 'Poppins'.obs;
   final enableShadow = false.obs;
@@ -77,6 +85,8 @@ class EditorController extends GetxController {
   final outlineSize = 0.0.obs;
   final enableCurved = false.obs;
   final curveRadius = 140.0.obs;
+  final enableNeon = false.obs;
+  final enableEmboss = false.obs;
 
   final draftText = ''.obs;
   final draftColor = Colors.white.obs;
@@ -174,6 +184,17 @@ class EditorController extends GetxController {
       if (e.code.contains('denied')) {
         final where = source == ImageSource.camera ? 'camera' : 'gallery';
         Get.snackbar('Permission needed', 'Please allow $where access.');
+        if (Platform.isIOS) {
+          Get.snackbar(
+            'Limited Access',
+            'Only selected photos available. Tap to allow more.',
+            duration: const Duration(seconds: 4),
+            mainButton: TextButton(
+              onPressed: openAppSettings,
+              child: const Text('Settings'),
+            ),
+          );
+        }
         return;
       }
       rethrow;
@@ -192,9 +213,20 @@ class EditorController extends GetxController {
     try {
       if (Platform.isIOS) {
         final status = await Permission.photosAddOnly.request();
-        if (!status.isGranted) {
+        if (!status.isGranted && !status.isLimited) {
           Get.snackbar('Save', 'Permission denied');
           return;
+        }
+        if (status.isLimited) {
+          Get.snackbar(
+            'Limited Access',
+            'Only selected photos are writable. Tap to allow more.',
+            duration: const Duration(seconds: 4),
+            mainButton: TextButton(
+              onPressed: openAppSettings,
+              child: const Text('Settings'),
+            ),
+          );
         }
       } else if (Platform.isAndroid) {
         final photos = await Permission.photos.request();
@@ -241,33 +273,20 @@ class EditorController extends GetxController {
     if (path == null || path.isEmpty) return;
     removeBgBusy.value = true;
     try {
-      final bytes = await File(path).readAsBytes();
-      final decoded = img.decodeImage(bytes);
-      if (decoded == null) {
-        Get.snackbar('Background', 'Unable to decode image');
+      final args = RemoveBgArgs(
+        path: path,
+        threshold: threshold,
+        sampleX: samplePoint?.dx,
+        sampleY: samplePoint?.dy,
+      );
+      final outBytes = await compute<RemoveBgArgs, Uint8List?>(
+        _removeBgTask,
+        args,
+      );
+      if (outBytes == null) {
+        Get.snackbar('Background', 'Unable to process image');
         return;
       }
-      int sx = 0;
-      int sy = 0;
-      if (samplePoint != null) {
-        sx = (samplePoint.dx.clamp(0, 1) * (decoded.width - 1)).round();
-        sy = (samplePoint.dy.clamp(0, 1) * (decoded.height - 1)).round();
-      }
-      final ref = decoded.getPixel(sx, sy);
-      final r0 = ref.r;
-      final g0 = ref.g;
-      final b0 = ref.b;
-      for (var y = 0; y < decoded.height; y++) {
-        for (var x = 0; x < decoded.width; x++) {
-          final p = decoded.getPixel(x, y);
-          if ((p.r - r0).abs() < threshold &&
-              (p.g - g0).abs() < threshold &&
-              (p.b - b0).abs() < threshold) {
-            decoded.setPixelRgba(x, y, 0, 0, 0, 0);
-          }
-        }
-      }
-      final outBytes = Uint8List.fromList(img.encodePng(decoded));
       final dir = await getTemporaryDirectory();
       final outPath =
           '${dir.path}/removed_bg_${DateTime.now().millisecondsSinceEpoch}.png';
@@ -292,6 +311,8 @@ class EditorController extends GetxController {
     double outline = 0.0,
     bool curved = false,
     double curveRadius = 140.0,
+    bool neon = false,
+    bool emboss = false,
   }) {
     final id = _nextTextId++;
     texts.add(
@@ -308,6 +329,8 @@ class EditorController extends GetxController {
         outline: outline,
         curved: curved,
         curveRadius: curveRadius,
+        neon: neon,
+        emboss: emboss,
       ),
     );
     activeTextId.value = id;
@@ -334,6 +357,8 @@ class EditorController extends GetxController {
     outlineSize.value = current?.outline ?? 0.0;
     enableCurved.value = current?.curved ?? false;
     curveRadius.value = current?.curveRadius ?? 140.0;
+    enableNeon.value = current?.neon ?? false;
+    enableEmboss.value = current?.emboss ?? false;
   }
 
   void setDraftText(String value) {
@@ -364,6 +389,8 @@ class EditorController extends GetxController {
         outline: outlineSize.value,
         curved: enableCurved.value,
         curveRadius: curveRadius.value,
+        neon: enableNeon.value,
+        emboss: enableEmboss.value,
       );
       return;
     }
@@ -377,6 +404,8 @@ class EditorController extends GetxController {
       outline: outlineSize.value,
       curved: enableCurved.value,
       curveRadius: curveRadius.value,
+      neon: enableNeon.value,
+      emboss: enableEmboss.value,
     );
   }
 
@@ -396,6 +425,8 @@ class EditorController extends GetxController {
     double? outline,
     bool? curved,
     double? curveRadius,
+    bool? neon,
+    bool? emboss,
   }) {
     final current = activeText;
     if (current == null) return;
@@ -411,6 +442,8 @@ class EditorController extends GetxController {
       outline: outline ?? outlineSize.value,
       curved: curved ?? enableCurved.value,
       curveRadius: curveRadius ?? this.curveRadius.value,
+      neon: neon ?? enableNeon.value,
+      emboss: emboss ?? enableEmboss.value,
     );
     _pushState();
   }
@@ -1317,6 +1350,8 @@ class EditorText {
     this.outline = 0.0,
     this.curved = false,
     this.curveRadius = 140.0,
+    this.neon = false,
+    this.emboss = false,
   });
 
   final int id;
@@ -1333,6 +1368,8 @@ class EditorText {
   final double outline;
   final bool curved;
   final double curveRadius;
+  final bool neon;
+  final bool emboss;
 
   EditorText copyWith({
     String? text,
@@ -1348,6 +1385,8 @@ class EditorText {
     double? outline,
     bool? curved,
     double? curveRadius,
+    bool? neon,
+    bool? emboss,
   }) {
     return EditorText(
       id: id,
@@ -1364,6 +1403,8 @@ class EditorText {
       outline: outline ?? this.outline,
       curved: curved ?? this.curved,
       curveRadius: curveRadius ?? this.curveRadius,
+      neon: neon ?? this.neon,
+      emboss: emboss ?? this.emboss,
     );
   }
 }
@@ -1380,10 +1421,15 @@ enum ExportFormat { png, jpeg }
 
 @immutable
 class TemplateGuide {
-  const TemplateGuide({required this.name, required this.aspectRatio});
+  const TemplateGuide({
+    required this.name,
+    required this.aspectRatio,
+    this.circleGuide = false,
+  });
 
   final String name;
   final double? aspectRatio;
+  final bool circleGuide;
 }
 
 @immutable
@@ -1549,4 +1595,61 @@ class EditorStroke {
       opacity: opacity ?? this.opacity,
     );
   }
+}
+
+@immutable
+class RemoveBgArgs {
+  const RemoveBgArgs({
+    required this.path,
+    required this.threshold,
+    this.sampleX,
+    this.sampleY,
+  });
+
+  final String path;
+  final int threshold;
+  final double? sampleX;
+  final double? sampleY;
+}
+
+Uint8List? _removeBgTask(RemoveBgArgs args) {
+  final file = File(args.path);
+  if (!file.existsSync()) return null;
+  final bytes = file.readAsBytesSync();
+  var decoded = img.decodeImage(bytes);
+  if (decoded == null) return null;
+
+  // Downscale very large images to avoid memory pressure (cap at ~12MP).
+  const maxPixels = 12000000; // 12 million
+  final pixels = decoded.width * decoded.height;
+  if (pixels > maxPixels) {
+    final scale = math.sqrt(maxPixels / pixels);
+    final targetW = (decoded.width * scale).round().clamp(640, decoded.width);
+    final targetH = (decoded.height * scale).round().clamp(640, decoded.height);
+    decoded = img.copyResize(decoded, width: targetW, height: targetH);
+  }
+
+  int sx = 0;
+  int sy = 0;
+  if (args.sampleX != null && args.sampleY != null) {
+    sx = (args.sampleX!.clamp(0, 1) * (decoded.width - 1)).round();
+    sy = (args.sampleY!.clamp(0, 1) * (decoded.height - 1)).round();
+  }
+  final ref = decoded.getPixel(sx, sy);
+  final r0 = ref.r;
+  final g0 = ref.g;
+  final b0 = ref.b;
+
+  for (var y = 0; y < decoded.height; y++) {
+    for (var x = 0; x < decoded.width; x++) {
+      final p = decoded.getPixel(x, y);
+      if ((p.r - r0).abs() < args.threshold &&
+          (p.g - g0).abs() < args.threshold &&
+          (p.b - b0).abs() < args.threshold) {
+        decoded.setPixelRgba(x, y, 0, 0, 0, 0);
+      }
+    }
+  }
+
+  return Uint8List.fromList(img.encodePng(decoded));
 }

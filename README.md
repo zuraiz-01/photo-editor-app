@@ -26,19 +26,3 @@ flutter run
 ## Permissions
 - Android: Camera, Photos/Storage for pick/save.
 - iOS: Camera, Photo Library read/write (usage descriptions in `ios/Runner/Info.plist`).
-
-## TODO / Roadmap
-- [x] Adjustment panel: brightness, contrast, exposure, vibrance, temperature sliders.
-- [x] Blur & vignette: radial vignette and selective blur for focus.
-- [x] Brush/doodle: freehand draw with size/color/opacity; undo/redo for strokes; eraser mode and stroke delete.
-- [x] Shapes & frames: rectangles/circles/arrows plus simple borders/frames; frame presets with color/width/radius.
-- [x] User presets: save/apply custom filter combos; apply/delete via chips.
-- [x] Background removal: tunable color-key removal with threshold slider.
-- [x] Perspective tools: straighten, rotate, flip, and tilt/skew.
-- [x] Layers panel: reorder/hide/lock text and stickers; stroke list with delete.
-- [x] Templates: common social sizes with safe-area guides.
-- [x] Export options: quality slider, PNG/JPEG toggle, share sheet, resize presets.
-- [x] Localization & themes: light/dark toggle.
-- [ ] Advanced background removal (better matting/edge quality).
-- [ ] More frame styles/patterns and per-platform safe-area presets.
-- [ ] Export: aspect + height presets, batch outputs.

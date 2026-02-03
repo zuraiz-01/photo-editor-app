@@ -31,10 +31,19 @@ class EditorController extends GetxController {
   final vibrance = 0.0.obs; // -1..1 mapped to 0..2 saturation
   final temperature = 0.0.obs; // -1..1 mapped to red/blue gain
   final removeBgBusy = false.obs;
+  final frameEnabled = false.obs;
+  final frameColor = Colors.white.obs;
+  final frameWidth = 6.0.obs;
+  final frameRadius = 16.0.obs;
+  final safeAreaEnabled = false.obs;
+  final safeAreaPresetIndex = 0.obs;
+  final framePresetIndex = 0.obs;
 
   // Perspective / transform
   final flipX = false.obs;
   final rotationQuarter = 0.obs; // 0,1,2,3
+  final skewX = 0.0.obs; // -0.5..0.5
+  final skewY = 0.0.obs;
 
   final texts = <EditorText>[].obs;
   final activeTextId = RxnInt();
@@ -46,6 +55,7 @@ class EditorController extends GetxController {
 
   final strokes = <EditorStroke>[].obs;
   bool isDrawing = false;
+  bool eraserMode = false;
   int _nextStrokeId = 1;
   final strokeColor = Colors.white.obs;
   final strokeWidth = 6.0.obs;
@@ -66,6 +76,44 @@ class EditorController extends GetxController {
     const TemplateGuide(name: 'Story 9:16', aspectRatio: 9 / 16),
   ];
   final selectedTemplateIndex = 0.obs;
+  final safeAreas = <SafeAreaGuide>[
+    const SafeAreaGuide(name: 'None', left: 0, right: 0, top: 0, bottom: 0),
+    const SafeAreaGuide(
+      name: 'IG Story Safe',
+      left: 0.05,
+      right: 0.05,
+      top: 0.12,
+      bottom: 0.12,
+    ),
+    const SafeAreaGuide(
+      name: 'IG Reel Safe',
+      left: 0.05,
+      right: 0.05,
+      top: 0.07,
+      bottom: 0.16,
+    ),
+    const SafeAreaGuide(
+      name: 'YouTube Thumb Safe',
+      left: 0.07,
+      right: 0.07,
+      top: 0.1,
+      bottom: 0.1,
+    ),
+    const SafeAreaGuide(
+      name: 'Twitter/X Feed',
+      left: 0.04,
+      right: 0.04,
+      top: 0.08,
+      bottom: 0.08,
+    ),
+    const SafeAreaGuide(
+      name: 'TikTok Feed',
+      left: 0.05,
+      right: 0.05,
+      top: 0.12,
+      bottom: 0.16,
+    ),
+  ];
 
   // Undo / Redo
   final _undoStack = <EditorState>[];
@@ -308,6 +356,7 @@ class EditorController extends GetxController {
     final index = texts.indexWhere((e) => e.id == id);
     if (index < 0) return;
     final item = texts[index];
+    if (item.locked) return;
     final nextDx = (item.dx + dx).clamp(0.0, 1.0);
     final nextDy = (item.dy + dy).clamp(0.0, 1.0);
     texts[index] = item.copyWith(dx: nextDx, dy: nextDy);
@@ -421,6 +470,38 @@ class EditorController extends GetxController {
     _pushState();
   }
 
+  void toggleStickerHidden(int id) {
+    final index = stickers.indexWhere((e) => e.id == id);
+    if (index < 0) return;
+    final s = stickers[index];
+    stickers[index] = s.copyWith(hidden: !s.hidden);
+    _pushState();
+  }
+
+  void toggleStickerLocked(int id) {
+    final index = stickers.indexWhere((e) => e.id == id);
+    if (index < 0) return;
+    final s = stickers[index];
+    stickers[index] = s.copyWith(locked: !s.locked);
+    _pushState();
+  }
+
+  void toggleTextHidden(int id) {
+    final index = texts.indexWhere((e) => e.id == id);
+    if (index < 0) return;
+    final t = texts[index];
+    texts[index] = t.copyWith(hidden: !t.hidden);
+    _pushState();
+  }
+
+  void toggleTextLocked(int id) {
+    final index = texts.indexWhere((e) => e.id == id);
+    if (index < 0) return;
+    final t = texts[index];
+    texts[index] = t.copyWith(locked: !t.locked);
+    _pushState();
+  }
+
   void updateStickerTransform({
     required int id,
     double? dx,
@@ -431,6 +512,7 @@ class EditorController extends GetxController {
     final index = stickers.indexWhere((e) => e.id == id);
     if (index < 0) return;
     final item = stickers[index];
+    if (item.locked) return;
     stickers[index] = item.copyWith(
       dx: (dx ?? item.dx).clamp(0.0, 1.0),
       dy: (dy ?? item.dy).clamp(0.0, 1.0),
@@ -498,6 +580,74 @@ class EditorController extends GetxController {
     _pushState();
   }
 
+  void setFrameEnabled(bool value) {
+    frameEnabled.value = value;
+    _pushState();
+  }
+
+  void setFrameColor(Color value) {
+    frameColor.value = value;
+    _pushState();
+  }
+
+  void setFrameWidth(double value) {
+    frameWidth.value = value.clamp(1.0, 40.0);
+    _pushState();
+  }
+
+  void setFrameRadius(double value) {
+    frameRadius.value = value.clamp(0.0, 80.0);
+    _pushState();
+  }
+
+  void setSafeAreaEnabled(bool value) {
+    safeAreaEnabled.value = value;
+    _pushState();
+  }
+
+  void setSafeAreaPreset(int index) {
+    if (index < 0 || index >= safeAreas.length) return;
+    safeAreaPresetIndex.value = index;
+    safeAreaEnabled.value = index != 0;
+    _pushState();
+  }
+
+  void applyFramePreset(int index) {
+    framePresetIndex.value = index;
+    switch (index) {
+      case 0: // None
+        frameEnabled.value = false;
+        break;
+      case 1: // Clean white
+        frameEnabled.value = true;
+        frameColor.value = Colors.white;
+        frameWidth.value = 6;
+        frameRadius.value = 18;
+        break;
+      case 2: // Minimal black
+        frameEnabled.value = true;
+        frameColor.value = Colors.black;
+        frameWidth.value = 8;
+        frameRadius.value = 10;
+        break;
+      case 3: // Gold rounded
+        frameEnabled.value = true;
+        frameColor.value = const Color(0xFFFFD54F);
+        frameWidth.value = 10;
+        frameRadius.value = 24;
+        break;
+      case 4: // Thin neon
+        frameEnabled.value = true;
+        frameColor.value = const Color(0xFF00E5FF);
+        frameWidth.value = 4;
+        frameRadius.value = 14;
+        break;
+      default:
+        frameEnabled.value = false;
+    }
+    _pushState();
+  }
+
   void setBrightness(double value) {
     brightness.value = value.clamp(-1.0, 1.0);
     _pushState();
@@ -546,15 +696,46 @@ class EditorController extends GetxController {
     _pushState();
   }
 
+  void renamePreset(int index, String name) {
+    if (index < 0 || index >= userPresets.length) return;
+    final preset = userPresets[index];
+    userPresets[index] = SavedPreset(name: name, state: preset.state);
+  }
+
+  void deletePreset(int index) {
+    if (index < 0 || index >= userPresets.length) return;
+    userPresets.removeAt(index);
+  }
+
   void setTemplate(int index) {
     if (index < 0 || index >= templates.length) return;
     selectedTemplateIndex.value = index;
     _pushState();
   }
 
+  void setSkewX(double value) {
+    skewX.value = value.clamp(-0.5, 0.5);
+    _pushState();
+  }
+
+  void setSkewY(double value) {
+    skewY.value = value.clamp(-0.5, 0.5);
+    _pushState();
+  }
+
+  void resetPerspective() {
+    skewX.value = 0;
+    skewY.value = 0;
+    _pushState();
+  }
+
   // Brush / strokes
   void beginStroke(Offset point) {
     if (!isDrawing) return;
+    if (eraserMode) {
+      _eraseAt(point);
+      return;
+    }
     final id = _nextStrokeId++;
     strokes.add(
       EditorStroke(
@@ -569,6 +750,11 @@ class EditorController extends GetxController {
   }
 
   void appendStroke(Offset point) {
+    if (!isDrawing) return;
+    if (eraserMode) {
+      _eraseAt(point);
+      return;
+    }
     if (strokes.isEmpty) return;
     final last = strokes.last;
     final updated = last.copyWith(points: [...last.points, point]);
@@ -597,6 +783,21 @@ class EditorController extends GetxController {
 
   void setStrokeOpacity(double o) {
     strokeOpacity.value = o.clamp(0.1, 1.0);
+  }
+
+  void setEraserMode(bool value) {
+    eraserMode = value;
+  }
+
+  void _eraseAt(Offset point) {
+    const radius = 16.0;
+    strokes.removeWhere((stroke) {
+      for (final p in stroke.points) {
+        if ((p - point).distance <= radius) return true;
+      }
+      return false;
+    });
+    _pushState();
   }
 
   void rotateQuarterTurns(int delta) {
@@ -664,6 +865,15 @@ class EditorController extends GetxController {
     return file.path;
   }
 
+  Future<Uint8List> resizeBytes(Uint8List bytes, {int? maxWidth}) async {
+    if (maxWidth == null) return bytes;
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return bytes;
+    if (decoded.width <= maxWidth) return bytes;
+    final resized = img.copyResize(decoded, width: maxWidth);
+    return Uint8List.fromList(img.encodePng(resized));
+  }
+
   // Undo / Redo
   bool get canUndo => _undoStack.length > 1;
   bool get canRedo => _redoStack.isNotEmpty;
@@ -696,6 +906,14 @@ class EditorController extends GetxController {
     vibrance.value = state.vibrance;
     temperature.value = state.temperature;
     selectedTemplateIndex.value = state.templateIndex;
+    skewX.value = state.skewX;
+    skewY.value = state.skewY;
+    frameEnabled.value = state.frameEnabled;
+    frameColor.value = state.frameColor;
+    frameWidth.value = state.frameWidth;
+    frameRadius.value = state.frameRadius;
+    safeAreaEnabled.value = state.safeAreaEnabled;
+    safeAreaPresetIndex.value = state.safeAreaPresetIndex;
     flipX.value = state.flipX;
     rotationQuarter.value = state.rotationQuarter;
     texts.assignAll(state.texts);
@@ -735,6 +953,14 @@ class EditorController extends GetxController {
       vibrance: vibrance.value,
       temperature: temperature.value,
       templateIndex: selectedTemplateIndex.value,
+      skewX: skewX.value,
+      skewY: skewY.value,
+      frameEnabled: frameEnabled.value,
+      frameColor: frameColor.value,
+      frameWidth: frameWidth.value,
+      frameRadius: frameRadius.value,
+      safeAreaEnabled: safeAreaEnabled.value,
+      safeAreaPresetIndex: safeAreaPresetIndex.value,
       flipX: flipX.value,
       rotationQuarter: rotationQuarter.value,
       texts: texts.map((e) => e.copyWith()).toList(),
@@ -1070,6 +1296,14 @@ class EditorState {
     required this.vibrance,
     required this.temperature,
     required this.templateIndex,
+    required this.skewX,
+    required this.skewY,
+    required this.frameEnabled,
+    required this.frameColor,
+    required this.frameWidth,
+    required this.frameRadius,
+    required this.safeAreaEnabled,
+    required this.safeAreaPresetIndex,
     required this.flipX,
     required this.rotationQuarter,
     required this.texts,
@@ -1088,6 +1322,14 @@ class EditorState {
   final double vibrance;
   final double temperature;
   final int templateIndex;
+  final double skewX;
+  final double skewY;
+  final bool frameEnabled;
+  final Color frameColor;
+  final double frameWidth;
+  final double frameRadius;
+  final bool safeAreaEnabled;
+  final int safeAreaPresetIndex;
   final bool flipX;
   final int rotationQuarter;
   final List<EditorText> texts;
@@ -1100,6 +1342,24 @@ class SavedPreset {
   const SavedPreset({required this.name, required this.state});
   final String name;
   final EditorState state;
+}
+
+@immutable
+class SafeAreaGuide {
+  const SafeAreaGuide({
+    required this.name,
+    required this.left,
+    required this.right,
+    required this.top,
+    required this.bottom,
+  });
+
+  final String name;
+  /// Fractions of width/height (0-1)
+  final double left;
+  final double right;
+  final double top;
+  final double bottom;
 }
 
 @immutable

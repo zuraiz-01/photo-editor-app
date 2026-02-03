@@ -89,6 +89,8 @@ class EditorView extends GetView<EditorController> {
   Future<void> _openExportSheet(BuildContext context) async {
     ExportFormat format = ExportFormat.png;
     double quality = 0.9;
+    String sizePreset = 'Original';
+    double maxWidth = 2048;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -131,6 +133,40 @@ class EditorView extends GetView<EditorController> {
                         onChanged: (v) => setState(() => quality = v),
                       ),
                     ],
+                    const SizedBox(height: 8),
+                    const SizedBox(height: 8),
+                    Text('Resolution'),
+                    const SizedBox(height: 4),
+                    DropdownButton<String>(
+                      isExpanded: true,
+                      value: sizePreset,
+                      items: const [
+                        DropdownMenuItem(value: 'Original', child: Text('Original size')),
+                        DropdownMenuItem(value: '4096', child: Text('4096 px width')),
+                        DropdownMenuItem(value: '2048', child: Text('2048 px width')),
+                        DropdownMenuItem(value: '1080', child: Text('1080 px width')),
+                        DropdownMenuItem(value: '720', child: Text('720 px width')),
+                        DropdownMenuItem(value: 'Custom', child: Text('Custom width')),
+                      ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setState(() {
+                          sizePreset = v;
+                          if (v != 'Custom' && v != 'Original') {
+                            maxWidth = double.parse(v);
+                          }
+                        });
+                      },
+                    ),
+                    if (sizePreset == 'Custom') ...[
+                      Text('Max width: ${maxWidth.round()} px'),
+                      Slider(
+                        value: maxWidth,
+                        min: 720,
+                        max: 4096,
+                        onChanged: (v) => setState(() => maxWidth = v),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     FilledButton.icon(
                       onPressed: () async {
@@ -141,8 +177,14 @@ class EditorView extends GetView<EditorController> {
                           format: format,
                           quality: (quality * 100).round(),
                         );
-                        await controller.saveToGallery(
+                        final resized = await controller.resizeBytes(
                           converted,
+                          maxWidth: sizePreset == 'Original'
+                              ? null
+                              : maxWidth.round(),
+                        );
+                        await controller.saveToGallery(
+                          resized,
                           format: format,
                           quality: (quality * 100).round(),
                         );
@@ -161,8 +203,14 @@ class EditorView extends GetView<EditorController> {
                           format: format,
                           quality: (quality * 100).round(),
                         );
-                        await controller.shareBytes(
+                        final resized = await controller.resizeBytes(
                           converted,
+                          maxWidth: sizePreset == 'Original'
+                              ? null
+                              : maxWidth.round(),
+                        );
+                        await controller.shareBytes(
+                          resized,
                           format: format,
                         );
                         if (context.mounted) Navigator.of(context).pop();
@@ -476,6 +524,20 @@ class EditorView extends GetView<EditorController> {
                     onChanged: controller.setTemperature,
                   ),
                   _AdjustmentSlider(
+                    label: 'Tilt X',
+                    value: controller.skewX.value,
+                    min: -0.5,
+                    max: 0.5,
+                    onChanged: controller.setSkewX,
+                  ),
+                  _AdjustmentSlider(
+                    label: 'Tilt Y',
+                    value: controller.skewY.value,
+                    min: -0.5,
+                    max: 0.5,
+                    onChanged: controller.setSkewY,
+                  ),
+                  _AdjustmentSlider(
                     label: 'Blur',
                     value: controller.blur.value,
                     min: 0,
@@ -489,8 +551,53 @@ class EditorView extends GetView<EditorController> {
                     max: 1,
                     onChanged: controller.setVignette,
                   ),
+                  const Divider(),
+                  Text('Frame', style: Theme.of(context).textTheme.titleSmall),
+                  DropdownButton<int>(
+                    value: controller.framePresetIndex.value,
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(value: 0, child: Text('None')),
+                      DropdownMenuItem(value: 1, child: Text('Clean White')),
+                      DropdownMenuItem(value: 2, child: Text('Minimal Black')),
+                      DropdownMenuItem(value: 3, child: Text('Gold Rounded')),
+                      DropdownMenuItem(value: 4, child: Text('Neon Thin')),
+                    ],
+                    onChanged: (i) {
+                      if (i != null) controller.applyFramePreset(i);
+                    },
+                  ),
+                  SwitchListTile(
+                    title: const Text('Show frame'),
+                    value: controller.frameEnabled.value,
+                    onChanged: controller.setFrameEnabled,
+                  ),
+                  if (controller.frameEnabled.value) ...[
+                    _ColorPickerRow(
+                      selected: controller.frameColor.value,
+                      onSelect: controller.setFrameColor,
+                    ),
+                    Text('Frame width: ${controller.frameWidth.value.round()}'),
+                    Slider(
+                      value: controller.frameWidth.value,
+                      min: 2,
+                      max: 40,
+                      onChanged: controller.setFrameWidth,
+                    ),
+                    Text('Corner radius: ${controller.frameRadius.value.round()}'),
+                    Slider(
+                      value: controller.frameRadius.value,
+                      min: 0,
+                      max: 60,
+                      onChanged: controller.setFrameRadius,
+                    ),
+                  ],
                   const SizedBox(height: 8),
-                  Row(
+                  Text('Presets', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       OutlinedButton(
                         onPressed: () async {
@@ -498,26 +605,28 @@ class EditorView extends GetView<EditorController> {
                           if (name == null || name.trim().isEmpty) return;
                           controller.saveUserPreset(name.trim());
                         },
-                        child: const Text('Save Preset'),
+                        child: const Text('Save current'),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: DropdownButton<int>(
-                          isExpanded: true,
-                          value: controller.userPresets.isEmpty ? null : 0,
-                          hint: const Text('Apply preset'),
-                          items: List.generate(
-                            controller.userPresets.length,
-                            (i) => DropdownMenuItem(
-                              value: i,
-                              child: Text(controller.userPresets[i].name),
+                      if (controller.userPresets.isNotEmpty)
+                        ...List.generate(controller.userPresets.length, (i) {
+                          final preset = controller.userPresets[i];
+                          return Chip(
+                            label: Text(preset.name),
+                            deleteIcon: const Icon(Icons.delete, size: 16),
+                            onDeleted: () => controller.deletePreset(i),
+                            avatar: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const Icon(Icons.play_arrow, size: 18),
+                              onPressed: () => controller.applyUserPreset(i),
+                              tooltip: 'Apply',
                             ),
-                          ),
-                          onChanged: (i) {
-                            if (i != null) controller.applyUserPreset(i);
-                          },
-                        ),
-                      ),
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                            ),
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            labelPadding: const EdgeInsets.only(right: 4),
+                          );
+                        }),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -532,7 +641,10 @@ class EditorView extends GetView<EditorController> {
                   Row(
                     children: [
                       TextButton(
-                        onPressed: controller.resetAdjustments,
+                        onPressed: () {
+                          controller.resetAdjustments();
+                          controller.resetPerspective();
+                        },
                         child: const Text('Reset'),
                       ),
                       const Spacer(),
@@ -699,6 +811,26 @@ class EditorView extends GetView<EditorController> {
                           dense: true,
                         );
                       }),
+                      const Divider(),
+                      SwitchListTile(
+                        title: const Text('Safe area guide'),
+                        value: controller.safeAreaEnabled.value,
+                        onChanged: controller.setSafeAreaEnabled,
+                      ),
+                      DropdownButton<int>(
+                        value: controller.safeAreaPresetIndex.value,
+                        isExpanded: true,
+                        items: List.generate(
+                          controller.safeAreas.length,
+                          (i) => DropdownMenuItem(
+                            value: i,
+                            child: Text(controller.safeAreas[i].name),
+                          ),
+                        ),
+                        onChanged: (i) {
+                          if (i != null) controller.setSafeAreaPreset(i);
+                        },
+                      ),
                       const SizedBox(height: 8),
                       FilledButton(
                         onPressed: () => Navigator.of(context).pop(),
@@ -742,17 +874,23 @@ class EditorView extends GetView<EditorController> {
                     children: [
                       Text('Brush', style: Theme.of(context).textTheme.titleMedium),
                       const Spacer(),
-                      Switch(
-                        value: controller.isDrawing,
-                        onChanged: (v) => controller.isDrawing = v,
-                      ),
-                    ],
+                  Switch(
+                    value: controller.isDrawing,
+                    onChanged: (v) => controller.isDrawing = v,
                   ),
-                  const SizedBox(height: 8),
-                  Text('Size: ${controller.strokeWidth.value.round()}'),
-                  Slider(
-                    value: controller.strokeWidth.value,
-                    min: 2,
+                ],
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: const Text('Eraser mode'),
+                value: controller.eraserMode,
+                onChanged: (v) => controller.setEraserMode(v),
+              ),
+              const SizedBox(height: 4),
+              Text('Size: ${controller.strokeWidth.value.round()}'),
+              Slider(
+                value: controller.strokeWidth.value,
+                min: 2,
                     max: 30,
                     onChanged: controller.setStrokeWidth,
                   ),
@@ -842,7 +980,25 @@ class EditorView extends GetView<EditorController> {
                     final selected = controller.activeStickerId.value == s.id;
                     return ListTile(
                       dense: true,
-                      leading: const Icon(Icons.layers),
+                      leading: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              s.hidden ? Icons.visibility_off : Icons.visibility,
+                              size: 18,
+                            ),
+                            onPressed: () => controller.toggleStickerHidden(s.id),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              s.locked ? Icons.lock : Icons.lock_open,
+                              size: 18,
+                            ),
+                            onPressed: () => controller.toggleStickerLocked(s.id),
+                          ),
+                        ],
+                      ),
                       title: Text('Sticker ${s.id}'),
                       trailing: selected ? const Icon(Icons.check) : null,
                       onTap: () => controller.setActiveSticker(s.id),
@@ -854,7 +1010,25 @@ class EditorView extends GetView<EditorController> {
                     final selected = controller.activeTextId.value == t.id;
                     return ListTile(
                       dense: true,
-                      leading: const Icon(Icons.text_fields),
+                      leading: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              t.hidden ? Icons.visibility_off : Icons.visibility,
+                              size: 18,
+                            ),
+                            onPressed: () => controller.toggleTextHidden(t.id),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              t.locked ? Icons.lock : Icons.lock_open,
+                              size: 18,
+                            ),
+                            onPressed: () => controller.toggleTextLocked(t.id),
+                          ),
+                        ],
+                      ),
                       title: Text(t.text, maxLines: 1, overflow: TextOverflow.ellipsis),
                       trailing: selected ? const Icon(Icons.check) : null,
                       onTap: () => controller.setActiveText(t.id),
@@ -1110,7 +1284,10 @@ class EditorView extends GetView<EditorController> {
             final blur = controller.blur.value * 20;
             final flipX = controller.flipX.value ? -1.0 : 1.0;
             final rot = controller.rotationQuarter.value * (math.pi / 2);
-            final transform = Matrix4.diagonal3Values(flipX, 1, 1)..rotateZ(rot);
+            final transform = Matrix4.diagonal3Values(flipX, 1, 1)
+              ..rotateZ(rot)
+              ..setEntry(0, 1, controller.skewX.value)
+              ..setEntry(1, 0, controller.skewY.value);
             return Transform(
               alignment: Alignment.center,
               transform: transform,
@@ -1204,6 +1381,7 @@ class EditorView extends GetView<EditorController> {
                               );
                             }),
                             ...stickers.map((s) {
+                              if (s.hidden) return const SizedBox.shrink();
                               final left =
                                   (s.dx * constraints.maxWidth) -
                                   (s.baseSize * s.scale / 2);
@@ -1234,6 +1412,7 @@ class EditorView extends GetView<EditorController> {
                               );
                             }),
                             ...texts.map((t) {
+                              if (t.hidden) return const SizedBox.shrink();
                               final left = t.dx * constraints.maxWidth;
                               final top = t.dy * constraints.maxHeight;
                               return Positioned(
@@ -1506,6 +1685,51 @@ class _StrokePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _StrokePainter oldDelegate) =>
       oldDelegate.strokes != strokes;
+}
+
+class _ColorPickerRow extends StatelessWidget {
+  const _ColorPickerRow({required this.selected, required this.onSelect});
+
+  final Color selected;
+  final ValueChanged<Color> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = <Color>[
+      Colors.white,
+      Colors.black,
+      Colors.red,
+      Colors.green,
+      Colors.blue,
+      Colors.amber,
+      Colors.purple,
+      Colors.cyan,
+    ];
+    return Wrap(
+      spacing: 8,
+      children: colors
+          .map(
+            (c) => GestureDetector(
+              onTap: () => onSelect(c),
+              child: Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: c,
+                  border: Border.all(
+                    color: selected == c
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
 }
 
 class _StickerOverlay extends StatefulWidget {

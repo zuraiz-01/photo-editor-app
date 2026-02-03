@@ -17,6 +17,10 @@ class HomeController extends GetxController {
       Get.toNamed(Routes.editor, arguments: file.path);
     } on PlatformException catch (e) {
       if (e.code == 'already_active') return;
+      if (e.code.contains('denied')) {
+        Get.snackbar('Permission needed', 'Please allow photo library access.');
+        return;
+      }
       rethrow;
     } finally {
       isPicking.value = false;
@@ -32,6 +36,10 @@ class HomeController extends GetxController {
       Get.toNamed(Routes.editor, arguments: file.path);
     } on PlatformException catch (e) {
       if (e.code == 'already_active') return;
+      if (e.code.contains('denied')) {
+        Get.snackbar('Permission needed', 'Please allow camera access.');
+        return;
+      }
       rethrow;
     } finally {
       isPicking.value = false;

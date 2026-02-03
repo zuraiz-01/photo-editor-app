@@ -1,16 +1,42 @@
-# photo_editor
+# Photo Editor
 
-A new Flutter project.
+Lightweight Flutter photo editor with filters, text, stickers, crop, and quick export.
 
-## Getting Started
+## Features
+- Image intake: pick from gallery or capture via camera.
+- Crop: native `image_cropper` UI.
+- Filters: multiple color-matrix presets with intensity slider and live previews.
+- Text overlay: add/update/delete, color + size, drag to move.
+- Stickers: emoji stickers with move/scale/rotate, delete, bring-to-front.
+- Save/export: renders current preview to PNG and saves to gallery (handles permissions).
+- Replace image: swap the current photo from gallery or camera without leaving the editor.
+- Dark neon UI built with GetX navigation and state management.
 
-This project is a starting point for a Flutter application.
+## Build & Run
+```
+flutter pub get
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
+## Release prep
+- Android: set your keystore in `android/key.properties` and ensure `applicationId` is correct in `android/app/build.gradle.kts`.
+- iOS: align bundle identifier in Xcode if needed.
+- Generate assets (already configured): `flutter pub run flutter_launcher_icons` and `flutter pub run flutter_native_splash:create`.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## Permissions
+- Android: Camera, Photos/Storage for pick/save.
+- iOS: Camera, Photo Library read/write (usage descriptions in `ios/Runner/Info.plist`).
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## TODO / Roadmap
+- [x] Adjustment panel: brightness, contrast, exposure, vibrance, temperature sliders.
+- [ ] Blur & vignette: radial vignette and selective blur for focus.
+- [x] Brush/doodle: freehand draw with size/color/opacity; undo/redo for strokes.
+- [x] Shapes & frames: rectangles/circles/arrows plus simple borders/frames.
+- [x] User presets: save/apply custom filter combos.
+- [x] Background removal: subject cutout and background swap (on-device model). *(simple corner-color keying)*
+- [x] Perspective tools: straighten, rotate, horizontal/vertical flip.
+- [x] Layers panel: reorder/hide/lock text and stickers.
+- [x] Global undo/redo for edits (stickers/text/filter changes).
+- [x] Templates: common social sizes with safe-area guides.
+- [x] Export options: quality slider, JPEG/PNG toggle, post-save share sheet.
+- [ ] Localization & themes: light mode toggle and multi-language strings.

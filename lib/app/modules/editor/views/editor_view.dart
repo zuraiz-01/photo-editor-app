@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../controllers/editor_controller.dart';
 
@@ -52,31 +55,129 @@ class EditorView extends GetView<EditorController> {
 
   static final GlobalKey _previewKey = GlobalKey();
 
-  Future<void> _saveCurrentImage() async {
+  Future<Uint8List?> _captureCurrentImageBytes() async {
     try {
       final context = _previewKey.currentContext;
       if (context == null) {
         Get.snackbar('Save', 'Preview not ready');
-        return;
+        return null;
       }
       final boundary = context.findRenderObject();
       if (boundary is! RenderRepaintBoundary) {
         Get.snackbar('Save', 'Preview not ready');
-        return;
+        return null;
       }
-
+      controller.isCapturing.value = true;
+      await Future<void>.delayed(const Duration(milliseconds: 16));
       final pixelRatio =
           ui.PlatformDispatcher.instance.views.first.devicePixelRatio;
       final image = await boundary.toImage(pixelRatio: pixelRatio);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      controller.isCapturing.value = false;
       if (byteData == null) {
         Get.snackbar('Save', 'Failed to export image');
-        return;
+        return null;
       }
-      await controller.saveToGallery(byteData.buffer.asUint8List());
+      return byteData.buffer.asUint8List();
     } catch (e) {
+      controller.isCapturing.value = false;
       Get.snackbar('Save failed', e.toString());
+      return null;
     }
+  }
+
+  Future<void> _openExportSheet(BuildContext context) async {
+    ExportFormat format = ExportFormat.png;
+    double quality = 0.9;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Export', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 12),
+                    SegmentedButton<ExportFormat>(
+                      segments: const [
+                        ButtonSegment(
+                          value: ExportFormat.png,
+                          label: Text('PNG'),
+                        ),
+                        ButtonSegment(
+                          value: ExportFormat.jpeg,
+                          label: Text('JPEG'),
+                        ),
+                      ],
+                      selected: {format},
+                      onSelectionChanged: (v) =>
+                          setState(() => format = v.first),
+                    ),
+                    const SizedBox(height: 12),
+                    if (format == ExportFormat.jpeg) ...[
+                      Text('Quality: ${(quality * 100).round()}%'),
+                      Slider(
+                        value: quality,
+                        min: 0.5,
+                        max: 1.0,
+                        onChanged: (v) => setState(() => quality = v),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: () async {
+                        final bytes = await _captureCurrentImageBytes();
+                        if (bytes == null) return;
+                        final converted = await controller.convertBytes(
+                          bytes,
+                          format: format,
+                          quality: (quality * 100).round(),
+                        );
+                        await controller.saveToGallery(
+                          converted,
+                          format: format,
+                          quality: (quality * 100).round(),
+                        );
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                      icon: const Icon(Icons.save_alt),
+                      label: const Text('Save to Gallery'),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final bytes = await _captureCurrentImageBytes();
+                        if (bytes == null) return;
+                        final converted = await controller.convertBytes(
+                          bytes,
+                          format: format,
+                          quality: (quality * 100).round(),
+                        );
+                        await controller.shareBytes(
+                          converted,
+                          format: format,
+                        );
+                        if (context.mounted) Navigator.of(context).pop();
+                      },
+                      icon: const Icon(Icons.ios_share),
+                      label: const Text('Share'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _openTextSheet(BuildContext context) {
@@ -319,6 +420,137 @@ class EditorView extends GetView<EditorController> {
     );
   }
 
+  void _openAdjustmentsSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Obx(() {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Adjustments',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  _AdjustmentSlider(
+                    label: 'Brightness',
+                    value: controller.brightness.value,
+                    min: -1,
+                    max: 1,
+                    onChanged: controller.setBrightness,
+                  ),
+                  _AdjustmentSlider(
+                    label: 'Contrast',
+                    value: controller.contrast.value,
+                    min: -0.5,
+                    max: 0.5,
+                    onChanged: controller.setContrast,
+                  ),
+                  _AdjustmentSlider(
+                    label: 'Exposure',
+                    value: controller.exposure.value,
+                    min: -1,
+                    max: 1,
+                    onChanged: controller.setExposure,
+                  ),
+                  _AdjustmentSlider(
+                    label: 'Vibrance',
+                    value: controller.vibrance.value,
+                    min: -1,
+                    max: 1,
+                    onChanged: controller.setVibrance,
+                  ),
+                  _AdjustmentSlider(
+                    label: 'Temperature',
+                    value: controller.temperature.value,
+                    min: -1,
+                    max: 1,
+                    onChanged: controller.setTemperature,
+                  ),
+                  _AdjustmentSlider(
+                    label: 'Blur',
+                    value: controller.blur.value,
+                    min: 0,
+                    max: 1,
+                    onChanged: controller.setBlur,
+                  ),
+                  _AdjustmentSlider(
+                    label: 'Vignette',
+                    value: controller.vignette.value,
+                    min: 0,
+                    max: 1,
+                    onChanged: controller.setVignette,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      OutlinedButton(
+                        onPressed: () async {
+                          final name = await _promptForText(context, 'Preset name');
+                          if (name == null || name.trim().isEmpty) return;
+                          controller.saveUserPreset(name.trim());
+                        },
+                        child: const Text('Save Preset'),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: DropdownButton<int>(
+                          isExpanded: true,
+                          value: controller.userPresets.isEmpty ? null : 0,
+                          hint: const Text('Apply preset'),
+                          items: List.generate(
+                            controller.userPresets.length,
+                            (i) => DropdownMenuItem(
+                              value: i,
+                              child: Text(controller.userPresets[i].name),
+                            ),
+                          ),
+                          onChanged: (i) {
+                            if (i != null) controller.applyUserPreset(i);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed:
+                        controller.removeBgBusy.value ? null : controller.removeBackground,
+                    icon: const Icon(Icons.image_not_supported_outlined),
+                    label: Obx(() => Text(
+                        controller.removeBgBusy.value ? 'Removing...' : 'Remove Background')),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: controller.resetAdjustments,
+                        child: const Text('Reset'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Done'),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            }),
+          ),
+        );
+      },
+    );
+  }
+
   void _openStickersSheet(BuildContext context) {
     final defaults = <String>[
       '😎',
@@ -429,6 +661,351 @@ class EditorView extends GetView<EditorController> {
     );
   }
 
+  void _openTemplateSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Obx(() {
+              final selected = controller.selectedTemplateIndex.value;
+              return ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.7,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Templates',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 12),
+                      ...List.generate(controller.templates.length, (index) {
+                        final template = controller.templates[index];
+                        // ignore: deprecated_member_use
+                        return RadioListTile<int>(
+                          value: index,
+                          // ignore: deprecated_member_use
+                          groupValue: selected,
+                          // ignore: deprecated_member_use
+                          onChanged: (v) => controller.setTemplate(v ?? 0),
+                          title: Text(template.name),
+                          dense: true,
+                        );
+                      }),
+                      const SizedBox(height: 8),
+                      FilledButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Done'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openBrushSheet(BuildContext context) {
+    final colors = <Color>[
+      Colors.white,
+      Colors.black,
+      Colors.red,
+      Colors.green,
+      Colors.blue,
+      Colors.amber,
+      Colors.purple,
+    ];
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Obx(() {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text('Brush', style: Theme.of(context).textTheme.titleMedium),
+                      const Spacer(),
+                      Switch(
+                        value: controller.isDrawing,
+                        onChanged: (v) => controller.isDrawing = v,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Size: ${controller.strokeWidth.value.round()}'),
+                  Slider(
+                    value: controller.strokeWidth.value,
+                    min: 2,
+                    max: 30,
+                    onChanged: controller.setStrokeWidth,
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Opacity: ${(controller.strokeOpacity.value * 100).round()}%'),
+                  Slider(
+                    value: controller.strokeOpacity.value,
+                    min: 0.1,
+                    max: 1,
+                    onChanged: controller.setStrokeOpacity,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: colors
+                        .map(
+                          (c) => GestureDetector(
+                            onTap: () => controller.setStrokeColor(c),
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: c,
+                                border: Border.all(
+                                  color: controller.strokeColor.value == c
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      OutlinedButton(
+                        onPressed: () {
+                          controller.undoStroke();
+                        },
+                        child: const Text('Undo Stroke'),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton(
+                        onPressed: controller.clearStrokes,
+                        child: const Text('Clear'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Done'),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            }),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openLayersSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Obx(() {
+              final texts = controller.texts.toList();
+              final stickers = controller.stickers.toList();
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Layers', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  Text('Stickers', style: Theme.of(context).textTheme.bodySmall),
+                  ...stickers.map((s) {
+                    final selected = controller.activeStickerId.value == s.id;
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.layers),
+                      title: Text('Sticker ${s.id}'),
+                      trailing: selected ? const Icon(Icons.check) : null,
+                      onTap: () => controller.setActiveSticker(s.id),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                  Text('Text', style: Theme.of(context).textTheme.bodySmall),
+                  ...texts.map((t) {
+                    final selected = controller.activeTextId.value == t.id;
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.text_fields),
+                      title: Text(t.text, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      trailing: selected ? const Icon(Icons.check) : null,
+                      onTap: () => controller.setActiveText(t.id),
+                    );
+                  }),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      OutlinedButton(
+                        onPressed: controller.activeStickerId.value != null
+                            ? controller.bringActiveStickerToFront
+                            : controller.bringActiveTextToFront,
+                        child: const Text('Bring to Front'),
+                      ),
+                      OutlinedButton(
+                        onPressed: controller.activeStickerId.value != null
+                            ? controller.bringActiveStickerToBack
+                            : controller.bringActiveTextToBack,
+                        child: const Text('Send to Back'),
+                      ),
+                      OutlinedButton(
+                        onPressed: () {
+                          if (controller.activeStickerId.value != null) {
+                            controller.removeActiveSticker();
+                          } else if (controller.activeTextId.value != null) {
+                            controller.removeActiveText();
+                          }
+                        },
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Done'),
+                  ),
+                ],
+              );
+            }),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openShapesSheet(BuildContext context) {
+    final colors = <Color>[
+      Colors.white,
+      Colors.black,
+      Colors.red,
+      Colors.green,
+      Colors.blue,
+      Colors.amber,
+      Colors.purple,
+    ];
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        Color selected = colors.first;
+        double size = 80;
+        EditorStickerKind kind = EditorStickerKind.rect;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Shapes', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Rect'),
+                          selected: kind == EditorStickerKind.rect,
+                          onSelected: (_) => setState(() => kind = EditorStickerKind.rect),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Circle'),
+                          selected: kind == EditorStickerKind.circle,
+                          onSelected: (_) => setState(() => kind = EditorStickerKind.circle),
+                        ),
+                        ChoiceChip(
+                          label: const Text('Arrow'),
+                          selected: kind == EditorStickerKind.arrow,
+                          onSelected: (_) => setState(() => kind = EditorStickerKind.arrow),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Size: ${size.round()}'),
+                    Slider(
+                      value: size,
+                      min: 40,
+                      max: 200,
+                      onChanged: (v) => setState(() => size = v),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: colors
+                          .map(
+                            (c) => GestureDetector(
+                              onTap: () => setState(() => selected = c),
+                              child: Container(
+                                width: 28,
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: c,
+                                  border: Border.all(
+                                    color: selected == c
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Colors.transparent,
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () {
+                        controller.addShape(
+                          kind: kind,
+                          baseSize: size,
+                          color: selected,
+                        );
+                        Navigator.of(context).pop();
+                      },
+                      child: const Text('Add Shape'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<String?> _askForEmoji(BuildContext context) async {
     final ctrl = TextEditingController();
     return showDialog<String>(
@@ -459,25 +1036,90 @@ class EditorView extends GetView<EditorController> {
     );
   }
 
+  Future<String?> _promptForText(BuildContext context, String title) async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(ctrl.text),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Editor')),
+      appBar: AppBar(
+        title: const Text('Editor'),
+        actions: [
+          IconButton(
+            tooltip: 'Undo',
+            onPressed: controller.undo,
+            icon: const Icon(Icons.undo),
+          ),
+          IconButton(
+            tooltip: 'Redo',
+            onPressed: controller.redo,
+            icon: const Icon(Icons.redo),
+          ),
+          IconButton(
+            tooltip: 'Replace photo',
+            onPressed: () => _openReplaceSheet(context),
+            icon: const Icon(Icons.image_outlined),
+          ),
+        ],
+      ),
       body: Center(
         child: Obx(() {
           final path = controller.imagePath.value;
+          final stickers = controller.stickers.toList();
+          final texts = controller.texts.toList();
           if (path == null || path.isEmpty) {
             return const Text('No image selected');
           }
 
           final matrix = controller.currentColorMatrix();
           final image = Image.file(File(path));
-          final preview = matrix == null
+          final basePreview = matrix == null
               ? image
               : ColorFiltered(
                   colorFilter: ColorFilter.matrix(matrix),
                   child: image,
                 );
+
+          final preview = Obx(() {
+            final blur = controller.blur.value * 20;
+            final flipX = controller.flipX.value ? -1.0 : 1.0;
+            final rot = controller.rotationQuarter.value * (math.pi / 2);
+            final transform = Matrix4.diagonal3Values(flipX, 1, 1)..rotateZ(rot);
+            return Transform(
+              alignment: Alignment.center,
+              transform: transform,
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                child: basePreview,
+              ),
+            );
+          });
 
           return Padding(
             padding: const EdgeInsets.all(16),
@@ -485,103 +1127,180 @@ class EditorView extends GetView<EditorController> {
               builder: (context, constraints) {
                 return RepaintBoundary(
                   key: _previewKey,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      GestureDetector(
+                  child: FittedBox(
+                    fit: BoxFit.contain,
+                    child: SizedBox(
+                      width: constraints.maxWidth,
+                      height: constraints.maxHeight,
+                      child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
                         onTap: controller.clearSelections,
-                        child: const SizedBox.expand(),
-                      ),
-                      FittedBox(
-                        fit: BoxFit.contain,
-                        child: SizedBox(
-                          width: constraints.maxWidth,
-                          height: constraints.maxHeight,
-                          child: preview,
-                        ),
-                      ),
-                      ...controller.stickers.map((s) {
-                        final left =
-                            (s.dx * constraints.maxWidth) -
-                            (s.baseSize * s.scale / 2);
-                        final top =
-                            (s.dy * constraints.maxHeight) -
-                            (s.baseSize * s.scale / 2);
-                        return Positioned(
-                          left: left,
-                          top: top,
-                          child: _StickerOverlay(
-                            sticker: s,
-                            isSelected:
-                                controller.activeStickerId.value == s.id,
-                            onTap: () => controller.setActiveSticker(s.id),
-                            onTransform: (delta, scale, rotation) {
-                              if (controller.activeStickerId.value != s.id)
-                                return;
-                              controller.updateStickerTransform(
-                                id: s.id,
-                                dx: s.dx + delta.dx / constraints.maxWidth,
-                                dy: s.dy + delta.dy / constraints.maxHeight,
-                                scale: scale,
-                                rotation: rotation,
-                              );
-                            },
-                          ),
-                        );
-                      }),
-                      ...controller.texts.map((t) {
-                        final left = t.dx * constraints.maxWidth;
-                        final top = t.dy * constraints.maxHeight;
-                        return Positioned(
-                          left: left,
-                          top: top,
-                          child: GestureDetector(
-                            onTap: () => controller.setActiveText(t.id),
-                            onPanUpdate: (d) {
-                              controller.moveTextByDelta(
-                                id: t.id,
-                                dx: d.delta.dx / constraints.maxWidth,
-                                dy: d.delta.dy / constraints.maxHeight,
-                              );
-                            },
-                            child: Obx(() {
-                              final selected =
-                                  controller.activeTextId.value == t.id;
-                              return Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: selected
-                                      ? Border.all(
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                          width: 2,
-                                        )
-                                      : null,
-                                  color: selected
-                                      ? Theme.of(context).colorScheme.surface
-                                            .withValues(alpha: 0.2)
-                                      : Colors.transparent,
-                                ),
-                                child: Text(
-                                  t.text,
-                                  style: TextStyle(
-                                    color: t.color,
-                                    fontSize: t.fontSize,
-                                    fontWeight: FontWeight.w600,
+                        onPanStart: (d) {
+                          if (!controller.isDrawing) return;
+                          controller.beginStroke(d.localPosition);
+                        },
+                        onPanUpdate: (d) {
+                          if (!controller.isDrawing) return;
+                          controller.appendStroke(d.localPosition);
+                        },
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            preview,
+                            Obx(() {
+                              if (controller.isCapturing.value) {
+                                return const SizedBox.shrink();
+                              }
+                              final tmpl = controller
+                                  .templates[controller.selectedTemplateIndex.value];
+                              final ratio = tmpl.aspectRatio;
+                              if (ratio == null) return const SizedBox.shrink();
+
+                              final maxW = constraints.maxWidth;
+                              final maxH = constraints.maxHeight;
+                              double w = maxW;
+                              double h = w / ratio;
+                              if (h > maxH) {
+                                h = maxH;
+                                w = h * ratio;
+                              }
+                              return IgnorePointer(
+                                child: Align(
+                                  child: Container(
+                                    width: w,
+                                    height: h,
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary
+                                            .withValues(alpha: 0.6),
+                                        width: 2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
                                   ),
                                 ),
                               );
                             }),
-                          ),
-                        );
-                      }),
-                    ],
+                            Obx(() {
+                              if (controller.isCapturing.value) {
+                                return const SizedBox.shrink();
+                              }
+                              final strength = controller.vignette.value;
+                              if (strength <= 0) return const SizedBox.shrink();
+                              return IgnorePointer(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: RadialGradient(
+                                      colors: [
+                                        Colors.transparent,
+                                        Colors.black.withValues(alpha: 0.55 * strength),
+                                      ],
+                                      stops: const [0.6, 1.0],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
+                            ...stickers.map((s) {
+                              final left =
+                                  (s.dx * constraints.maxWidth) -
+                                  (s.baseSize * s.scale / 2);
+                              final top =
+                                  (s.dy * constraints.maxHeight) -
+                                  (s.baseSize * s.scale / 2);
+                              return Positioned(
+                                left: left,
+                                top: top,
+                                child: _StickerOverlay(
+                                  sticker: s,
+                                  isSelected:
+                                      controller.activeStickerId.value == s.id,
+                                  onTap: () => controller.setActiveSticker(s.id),
+                                  onTransform: (delta, scale, rotation) {
+                                    if (controller.activeStickerId.value != s.id) {
+                                      return;
+                                    }
+                                    controller.updateStickerTransform(
+                                      id: s.id,
+                                      dx: s.dx + delta.dx / constraints.maxWidth,
+                                      dy: s.dy + delta.dy / constraints.maxHeight,
+                                      scale: scale,
+                                      rotation: rotation,
+                                    );
+                                  },
+                                ),
+                              );
+                            }),
+                            ...texts.map((t) {
+                              final left = t.dx * constraints.maxWidth;
+                              final top = t.dy * constraints.maxHeight;
+                              return Positioned(
+                                left: left,
+                                top: top,
+                                child: GestureDetector(
+                                  onTap: () => controller.setActiveText(t.id),
+                                  onPanUpdate: (d) {
+                                    controller.moveTextByDelta(
+                                      id: t.id,
+                                      dx: d.delta.dx / constraints.maxWidth,
+                                      dy: d.delta.dy / constraints.maxHeight,
+                                    );
+                                  },
+                                  child: Obx(() {
+                                    final selected =
+                                        controller.activeTextId.value == t.id;
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: selected
+                                            ? Border.all(
+                                                color: Theme.of(
+                                                  context,
+                                                ).colorScheme.primary,
+                                                width: 2,
+                                              )
+                                            : null,
+                                        color: selected
+                                            ? Theme.of(context).colorScheme.surface
+                                                  .withValues(alpha: 0.2)
+                                            : Colors.transparent,
+                                      ),
+                                      child: Text(
+                                        t.text,
+                                        style: TextStyle(
+                                          color: t.color,
+                                          fontSize: t.fontSize,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ),
+                              );
+                            }),
+                            Obx(() {
+                              final strokes = controller.strokes.toList();
+                              if (strokes.isEmpty) return const SizedBox.shrink();
+                              return IgnorePointer(
+                                child: CustomPaint(
+                                  painter: _StrokePainter(strokes),
+                                  size: Size(
+                                    constraints.maxWidth,
+                                    constraints.maxHeight,
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 );
               },
@@ -599,42 +1318,194 @@ class EditorView extends GetView<EditorController> {
               top: BorderSide(color: Theme.of(context).dividerColor),
             ),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _EditorOption(
-                icon: Icons.crop,
-                label: 'Crop',
-                onTap: controller.cropImage,
-              ),
-              _EditorOption(
-                icon: Icons.tune,
-                label: 'Filter',
-                onTap: () => _openFiltersSheet(context),
-              ),
-              _EditorOption(
-                icon: Icons.text_fields,
-                label: 'Text',
-                onTap: () {
-                  _openTextSheet(context);
-                },
-              ),
-              _EditorOption(
-                icon: Icons.emoji_emotions_outlined,
-                label: 'Sticker',
-                onTap: () => _openStickersSheet(context),
-              ),
-              _EditorOption(
-                icon: Icons.save_alt,
-                label: 'Save',
-                onTap: _saveCurrentImage,
-              ),
-            ],
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                _EditorOption(
+                  icon: Icons.crop,
+                  label: 'Crop',
+                  onTap: controller.cropImage,
+                ),
+                _EditorOption(
+                  icon: Icons.tune,
+                  label: 'Filter',
+                  onTap: () => _openFiltersSheet(context),
+                ),
+                _EditorOption(
+                  icon: Icons.settings_brightness,
+                  label: 'Adjust',
+                  onTap: () => _openAdjustmentsSheet(context),
+                ),
+                _EditorOption(
+                  icon: Icons.text_fields,
+                  label: 'Text',
+                  onTap: () {
+                    _openTextSheet(context);
+                  },
+                ),
+                _EditorOption(
+                  icon: Icons.emoji_emotions_outlined,
+                  label: 'Sticker',
+                  onTap: () => _openStickersSheet(context),
+                ),
+                _EditorOption(
+                  icon: Icons.category_outlined,
+                  label: 'Shapes',
+                  onTap: () => _openShapesSheet(context),
+                ),
+                _EditorOption(
+                  icon: Icons.crop_16_9,
+                  label: 'Template',
+                  onTap: () => _openTemplateSheet(context),
+                ),
+                _EditorOption(
+                  icon: Icons.rotate_90_degrees_ccw,
+                  label: 'Rotate',
+                  onTap: () => controller.rotateQuarterTurns(1),
+                ),
+                _EditorOption(
+                  icon: Icons.flip,
+                  label: 'Flip',
+                  onTap: controller.toggleFlipX,
+                ),
+                _EditorOption(
+                  icon: Icons.layers,
+                  label: 'Layers',
+                  onTap: () => _openLayersSheet(context),
+                ),
+                _EditorOption(
+                  icon: Icons.brush,
+                  label: controller.isDrawing ? 'Draw On' : 'Brush',
+                  onTap: () => _openBrushSheet(context),
+                ),
+                _EditorOption(
+                  icon: Icons.save_alt,
+                  label: 'Save',
+                  onTap: () => _openExportSheet(context),
+                ),
+              ]
+                  .map(
+                    (w) => Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: w,
+                    ),
+                  )
+                  .toList(),
+            ),
           ),
         ),
       ),
     );
   }
+
+  void _openReplaceSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Replace Photo',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    controller.replaceImage(ImageSource.gallery);
+                  },
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('Pick from Gallery'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    controller.replaceImage(ImageSource.camera);
+                  },
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: const Text('Capture from Camera'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AdjustmentSlider extends StatelessWidget {
+  const _AdjustmentSlider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '$label: ${value.toStringAsFixed(2)}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        Slider(
+          value: value.clamp(min, max),
+          min: min,
+          max: max,
+          onChanged: onChanged,
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+class _StrokePainter extends CustomPainter {
+  const _StrokePainter(this.strokes);
+
+  final List<EditorStroke> strokes;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final stroke in strokes) {
+      if (stroke.points.length < 2) continue;
+      final paint = Paint()
+        ..color = stroke.color.withValues(alpha: stroke.opacity)
+        ..strokeWidth = stroke.width
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      final path = Path()..moveTo(stroke.points.first.dx, stroke.points.first.dy);
+      for (var i = 1; i < stroke.points.length; i++) {
+        path.lineTo(stroke.points[i].dx, stroke.points[i].dy);
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StrokePainter oldDelegate) =>
+      oldDelegate.strokes != strokes;
 }
 
 class _StickerOverlay extends StatefulWidget {
@@ -670,10 +1541,39 @@ class _StickerOverlayState extends State<_StickerOverlay> {
   @override
   Widget build(BuildContext context) {
     final s = widget.sticker;
-    final child = Text(
-      s.data,
-      style: TextStyle(fontSize: s.baseSize, height: 1),
-    );
+    Widget child;
+    switch (s.kind) {
+      case EditorStickerKind.emoji:
+        child = Text(
+          s.data,
+          style: TextStyle(fontSize: s.baseSize, height: 1, color: s.color),
+        );
+        break;
+      case EditorStickerKind.rect:
+        child = Container(
+          width: s.baseSize,
+          height: s.baseSize,
+          color: s.color,
+        );
+        break;
+      case EditorStickerKind.circle:
+        child = Container(
+          width: s.baseSize,
+          height: s.baseSize,
+          decoration: BoxDecoration(
+            color: s.color,
+            shape: BoxShape.circle,
+          ),
+        );
+        break;
+      case EditorStickerKind.arrow:
+        child = Icon(
+          Icons.arrow_upward,
+          size: s.baseSize,
+          color: s.color,
+        );
+        break;
+    }
 
     return GestureDetector(
       onTap: widget.onTap,

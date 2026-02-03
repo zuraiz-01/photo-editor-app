@@ -1,4 +1,4 @@
-package com.example.photo_editor
+package com.photoeditor.app
 
 import io.flutter.embedding.android.FlutterActivity
 

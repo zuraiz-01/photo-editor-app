@@ -29,14 +29,16 @@ flutter run
 
 ## TODO / Roadmap
 - [x] Adjustment panel: brightness, contrast, exposure, vibrance, temperature sliders.
-- [ ] Blur & vignette: radial vignette and selective blur for focus.
-- [x] Brush/doodle: freehand draw with size/color/opacity; undo/redo for strokes.
-- [x] Shapes & frames: rectangles/circles/arrows plus simple borders/frames.
-- [x] User presets: save/apply custom filter combos.
-- [x] Background removal: subject cutout and background swap (on-device model). *(simple corner-color keying)*
-- [x] Perspective tools: straighten, rotate, horizontal/vertical flip.
-- [x] Layers panel: reorder/hide/lock text and stickers.
-- [x] Global undo/redo for edits (stickers/text/filter changes).
+- [x] Blur & vignette: radial vignette and selective blur for focus.
+- [x] Brush/doodle: freehand draw with size/color/opacity; undo/redo for strokes; eraser mode and stroke delete.
+- [x] Shapes & frames: rectangles/circles/arrows plus simple borders/frames; frame presets with color/width/radius.
+- [x] User presets: save/apply custom filter combos; apply/delete via chips.
+- [x] Background removal: tunable color-key removal with threshold slider.
+- [x] Perspective tools: straighten, rotate, flip, and tilt/skew.
+- [x] Layers panel: reorder/hide/lock text and stickers; stroke list with delete.
 - [x] Templates: common social sizes with safe-area guides.
-- [x] Export options: quality slider, JPEG/PNG toggle, post-save share sheet.
-- [ ] Localization & themes: light mode toggle and multi-language strings.
+- [x] Export options: quality slider, PNG/JPEG toggle, share sheet, resize presets.
+- [x] Localization & themes: light/dark toggle.
+- [ ] Advanced background removal (better matting/edge quality).
+- [ ] More frame styles/patterns and per-platform safe-area presets.
+- [ ] Export: aspect + height presets, batch outputs.

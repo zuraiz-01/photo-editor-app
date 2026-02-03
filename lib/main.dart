@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:sizer/sizer.dart';
 
 import 'app/routes/app_pages.dart';
 import 'app/routes/app_routes.dart';
@@ -91,14 +92,18 @@ class MyApp extends StatelessWidget {
       ),
     );
 
-    return GetMaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Photo Editor',
-      theme: lightTheme,
-      darkTheme: darkTheme,
-      themeMode: Get.find<ThemeController>().mode,
-      initialRoute: Routes.home,
-      getPages: AppPages.pages,
+    return Sizer(
+      builder: (context, orientation, deviceType) {
+        return GetMaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Photo Editor',
+          theme: lightTheme,
+          darkTheme: darkTheme,
+          themeMode: Get.find<ThemeController>().mode,
+          initialRoute: Routes.home,
+          getPages: AppPages.pages,
+        );
+      },
     );
   }
 }

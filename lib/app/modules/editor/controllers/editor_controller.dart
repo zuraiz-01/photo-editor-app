@@ -212,6 +212,13 @@ class EditorController extends GetxController {
   }
 
   Future<void> removeBackground() async {
+    await removeBackgroundWithThreshold(threshold: 18);
+  }
+
+  Future<void> removeBackgroundWithThreshold({
+    required int threshold,
+    Offset? samplePoint, // normalized 0-1
+  }) async {
     if (removeBgBusy.value) return;
     final path = imagePath.value;
     if (path == null || path.isEmpty) return;
@@ -223,11 +230,16 @@ class EditorController extends GetxController {
         Get.snackbar('Background', 'Unable to decode image');
         return;
       }
-      final ref = decoded.getPixel(0, 0);
+      int sx = 0;
+      int sy = 0;
+      if (samplePoint != null) {
+        sx = (samplePoint.dx.clamp(0, 1) * (decoded.width - 1)).round();
+        sy = (samplePoint.dy.clamp(0, 1) * (decoded.height - 1)).round();
+      }
+      final ref = decoded.getPixel(sx, sy);
       final r0 = ref.r;
       final g0 = ref.g;
       final b0 = ref.b;
-      const threshold = 18;
       for (var y = 0; y < decoded.height; y++) {
         for (var x = 0; x < decoded.width; x++) {
           final p = decoded.getPixel(x, y);

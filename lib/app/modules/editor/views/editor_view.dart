@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:sizer/sizer.dart';
 
 import '../controllers/editor_controller.dart';
 import '../../../theme/theme_controller.dart';
@@ -632,8 +633,9 @@ class EditorView extends GetView<EditorController> {
                   ),
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
-                    onPressed:
-                        controller.removeBgBusy.value ? null : controller.removeBackground,
+                    onPressed: controller.removeBgBusy.value
+                        ? null
+                        : () => _openRemoveBgSheet(context),
                     icon: const Icon(Icons.image_not_supported_outlined),
                     label: Obx(() => Text(
                         controller.removeBgBusy.value ? 'Removing...' : 'Remove Background')),
@@ -1253,6 +1255,55 @@ class EditorView extends GetView<EditorController> {
     );
   }
 
+  void _openRemoveBgSheet(BuildContext context) {
+    double threshold = 18;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: StatefulBuilder(
+              builder: (context, setState) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('Background Removal',
+                        style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 12),
+                    Text('Threshold: ${threshold.round()}'),
+                    Slider(
+                      value: threshold,
+                      min: 5,
+                      max: 60,
+                      onChanged: (v) => setState(() => threshold = v),
+                    ),
+                    const SizedBox(height: 8),
+                    FilledButton(
+                      onPressed: controller.removeBgBusy.value
+                          ? null
+                          : () async {
+                              await controller.removeBackgroundWithThreshold(
+                                threshold: threshold.round(),
+                              );
+                              if (context.mounted) Navigator.of(context).pop();
+                            },
+                      child: Obx(() => Text(
+                          controller.removeBgBusy.value ? 'Working...' : 'Apply')),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1321,7 +1372,7 @@ class EditorView extends GetView<EditorController> {
           });
 
           return Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(4.w),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 return RepaintBoundary(
@@ -1512,7 +1563,7 @@ class EditorView extends GetView<EditorController> {
       bottomNavigationBar: SafeArea(
         top: false,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: EdgeInsets.symmetric(vertical: 1.2.h, horizontal: 1.5.w),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
             border: Border(
@@ -1521,7 +1572,7 @@ class EditorView extends GetView<EditorController> {
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: EdgeInsets.symmetric(horizontal: 1.5.w),
             child: Row(
               children: [
                 _EditorOption(
@@ -1589,7 +1640,7 @@ class EditorView extends GetView<EditorController> {
               ]
                   .map(
                     (w) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      padding: EdgeInsets.symmetric(horizontal: 1.2.w),
                       child: w,
                     ),
                   )
